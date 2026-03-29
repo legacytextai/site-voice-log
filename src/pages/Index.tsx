@@ -87,7 +87,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Dialog open={showOnboarding} onOpenChange={(open) => { if (!open) dismissOnboarding(); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Quick Start — Just Tap to Record</DialogTitle>
             <DialogDescription asChild>

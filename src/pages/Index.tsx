@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import RecordButton from "@/components/RecordButton";
 import LogList from "@/components/LogList";
 import ReportSection from "@/components/ReportSection";
@@ -7,6 +7,8 @@ import ProjectField from "@/components/ProjectField";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/integrations/supabase/client";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 const today = () =>
   new Date().toLocaleDateString("en-US", {
@@ -22,6 +24,25 @@ const Index = () => {
   const [report, setReport] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const justLoggedInRef = useRef(false);
+
+  const handleLogin = async (email: string) => {
+    await login(email);
+    justLoggedInRef.current = true;
+  };
+
+  useEffect(() => {
+    if (user && justLoggedInRef.current && !localStorage.getItem("sitelog_onboarding_seen")) {
+      justLoggedInRef.current = false;
+      setShowOnboarding(true);
+    }
+  }, [user]);
+
+  const dismissOnboarding = () => {
+    localStorage.setItem("sitelog_onboarding_seen", "true");
+    setShowOnboarding(false);
+  };
 
   const handleGenerateReport = async () => {
     if (!user) return;
@@ -60,11 +81,27 @@ const Index = () => {
   }
 
   if (!user) {
-    return <EmailEntry onLogin={login} />;
+    return <EmailEntry onLogin={handleLogin} />;
   }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <Dialog open={showOnboarding} onOpenChange={(open) => { if (!open) dismissOnboarding(); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Quick Start — Just Tap to Record</DialogTitle>
+            <DialogDescription asChild>
+              <ol className="list-decimal list-inside space-y-2 pt-2 text-sm text-muted-foreground">
+                <li>Talk your daily updates into the app (use normal language)</li>
+                <li>Add updates throughout the day (each one is saved)</li>
+                <li>Click Generate Report before leaving (PDF sent automatically)</li>
+              </ol>
+            </DialogDescription>
+          </DialogHeader>
+          <Button onClick={dismissOnboarding} className="w-full mt-2">Got It</Button>
+        </DialogContent>
+      </Dialog>
+
       <header className="px-5 pt-12 pb-6 space-y-4">
         <h1 className="text-lg font-bold text-foreground tracking-tight">
           SiteLog

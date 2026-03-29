@@ -14,27 +14,100 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_reports: {
+        Row: {
+          created_at: string | null
+          id: string
+          pdf_url: string | null
+          project_name: string | null
+          report_date: string
+          status: string
+          user_email: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          pdf_url?: string | null
+          project_name?: string | null
+          report_date?: string
+          status?: string
+          user_email: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          pdf_url?: string | null
+          project_name?: string | null
+          report_date?: string
+          status?: string
+          user_email?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_reports: {
         Row: {
           content: string
           created_at: string
           id: string
           log_ids: string[]
+          pdf_url: string | null
           report_date: string
+          user_id: string | null
         }
         Insert: {
           content: string
           created_at?: string
           id?: string
           log_ids: string[]
+          pdf_url?: string | null
           report_date?: string
+          user_id?: string | null
         }
         Update: {
           content?: string
           created_at?: string
           id?: string
           log_ids?: string[]
+          pdf_url?: string | null
           report_date?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
         }
         Relationships: []
       }
@@ -47,6 +120,7 @@ export type Database = {
           recorded_at: string
           status: string
           transcript: string | null
+          user_id: string | null
         }
         Insert: {
           audio_path: string
@@ -56,6 +130,7 @@ export type Database = {
           recorded_at?: string
           status?: string
           transcript?: string | null
+          user_id?: string | null
         }
         Update: {
           audio_path?: string
@@ -65,8 +140,17 @@ export type Database = {
           recorded_at?: string
           status?: string
           transcript?: string | null
+          user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "voice_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

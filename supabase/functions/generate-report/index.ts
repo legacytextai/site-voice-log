@@ -79,11 +79,15 @@ serve(async (req) => {
         continue;
       }
 
-      // Convert audio to base64 for AI
+      // Convert audio to base64 for AI (chunked to avoid stack overflow)
       const arrayBuffer = await audioData.arrayBuffer();
-      const base64Audio = btoa(
-        String.fromCharCode(...new Uint8Array(arrayBuffer))
-      );
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = "";
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      const base64Audio = btoa(binary);
 
       // Transcribe via Lovable AI (Gemini supports audio)
       const transcribeResponse = await fetch(

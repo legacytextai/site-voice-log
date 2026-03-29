@@ -47,6 +47,14 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        record: {
+          DEFAULT: "hsl(var(--record))",
+          foreground: "hsl(var(--record-foreground))",
+        },
+        status: {
+          saving: "hsl(var(--status-saving))",
+          saved: "hsl(var(--status-saved))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

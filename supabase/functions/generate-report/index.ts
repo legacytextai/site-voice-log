@@ -7,17 +7,170 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Minimal PDF generator: produces a valid PDF with text content
+function generatePdfBytes(title: string, content: string): Uint8Array {
+  const lines = content.split("\n");
+  const pageHeight = 842; // A4
+  const pageWidth = 595;
+  const margin = 50;
+  const lineHeight = 14;
+  const maxCharsPerLine = 80;
+  const usableHeight = pageHeight - 2 * margin;
+  const linesPerPage = Math.floor(usableHeight / lineHeight);
+
+  // Word-wrap lines
+  const wrappedLines: string[] = [];
+  for (const line of lines) {
+    if (line.length === 0) {
+      wrappedLines.push("");
+      continue;
+    }
+    let remaining = line;
+    while (remaining.length > maxCharsPerLine) {
+      let breakAt = remaining.lastIndexOf(" ", maxCharsPerLine);
+      if (breakAt <= 0) breakAt = maxCharsPerLine;
+      wrappedLines.push(remaining.substring(0, breakAt));
+      remaining = remaining.substring(breakAt).trimStart();
+    }
+    wrappedLines.push(remaining);
+  }
+
+  // Split into pages
+  const pages: string[][] = [];
+  for (let i = 0; i < wrappedLines.length; i += linesPerPage) {
+    pages.push(wrappedLines.slice(i, i + linesPerPage));
+  }
+  if (pages.length === 0) pages.push([""]);
+
+  // Escape PDF special chars
+  const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+
+  let objCount = 0;
+  const objects: string[] = [];
+  const offsets: number[] = [];
+
+  const addObj = (content: string) => {
+    objCount++;
+    objects.push(`${objCount} 0 obj\n${content}\nendobj\n`);
+    return objCount;
+  };
+
+  // 1: Catalog
+  addObj(`<< /Type /Catalog /Pages 2 0 R >>`);
+
+  // 2: Pages (placeholder, we'll fix references)
+  const pagesObjId = objCount + 1;
+  addObj(`<< /Type /Pages /Kids [${pages.map((_, i) => `${pagesObjId + 1 + i * 2} 0 R`).join(" ")}] /Count ${pages.length} >>`);
+
+  // 3: Font
+  const fontId = addObj(`<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>`);
+
+  // Page objects + content streams
+  for (const pageLines of pages) {
+    const textOps: string[] = [];
+    textOps.push("BT");
+    textOps.push(`/F1 10 Tf`);
+    textOps.push(`${margin} ${pageHeight - margin} Td`);
+    textOps.push(`0 -${lineHeight} Td`);
+
+    for (const line of pageLines) {
+      textOps.push(`(${esc(line)}) Tj`);
+      textOps.push(`0 -${lineHeight} Td`);
+    }
+    textOps.push("ET");
+
+    const stream = textOps.join("\n");
+    const streamId = addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    // Page object (added after stream so IDs work out — but we pre-calculated in Pages kids)
+    // Actually let's restructure: page first, then stream
+  }
+
+  // Rebuild properly
+  objCount = 0;
+  objects.length = 0;
+
+  // Obj 1: Catalog
+  addObj(`<< /Type /Catalog /Pages 2 0 R >>`);
+
+  // Calculate object IDs: font=3, then for each page: pageObj, contentStream
+  const fontObjId = 3;
+  const pageObjIds: number[] = [];
+  for (let i = 0; i < pages.length; i++) {
+    pageObjIds.push(4 + i * 2); // page obj
+  }
+
+  // Obj 2: Pages
+  addObj(`<< /Type /Pages /Kids [${pageObjIds.map(id => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`);
+
+  // Obj 3: Font
+  addObj(`<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>`);
+
+  // Pages + streams
+  for (let p = 0; p < pages.length; p++) {
+    const pageLines = pages[p];
+    const contentObjId = 4 + p * 2 + 1;
+
+    // Page object
+    addObj(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents ${contentObjId} 0 R /Resources << /Font << /F1 ${fontObjId} 0 R >> >> >>`);
+
+    // Content stream
+    const textOps: string[] = [];
+    textOps.push("BT");
+    textOps.push(`/F1 10 Tf`);
+    let y = pageHeight - margin;
+    textOps.push(`${margin} ${y} Td`);
+
+    for (const line of pageLines) {
+      textOps.push(`(${esc(line)}) Tj`);
+      textOps.push(`0 -${lineHeight} Td`);
+    }
+    textOps.push("ET");
+
+    const stream = textOps.join("\n");
+    addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  }
+
+  // Build PDF
+  let pdf = "%PDF-1.4\n";
+  for (let i = 0; i < objects.length; i++) {
+    offsets.push(pdf.length);
+    pdf += objects[i];
+  }
+
+  const xrefOffset = pdf.length;
+  pdf += "xref\n";
+  pdf += `0 ${objCount + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (const offset of offsets) {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += "trailer\n";
+  pdf += `<< /Size ${objCount + 1} /Root 1 0 R >>\n`;
+  pdf += "startxref\n";
+  pdf += `${xrefOffset}\n`;
+  pdf += "%%EOF\n";
+
+  return new TextEncoder().encode(pdf);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { log_ids } = await req.json();
+    const { log_ids, user_id } = await req.json();
 
     if (!log_ids || !Array.isArray(log_ids) || log_ids.length === 0) {
       return new Response(
         JSON.stringify({ error: "log_ids array is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!user_id) {
+      return new Response(
+        JSON.stringify({ error: "user_id is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -35,7 +188,23 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Step 1: Fetch logs that need transcription
+    // Fetch user email
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("email")
+      .eq("id", user_id)
+      .single();
+
+    if (userError || !userData) {
+      return new Response(
+        JSON.stringify({ error: "User not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const userEmail = userData.email;
+
+    // Fetch logs
     const { data: logs, error: logsError } = await supabase
       .from("voice_logs")
       .select("*")
@@ -50,7 +219,7 @@ serve(async (req) => {
       );
     }
 
-    // Step 2: For each log without a transcript, download audio and transcribe
+    // Transcribe logs without transcripts
     const transcripts: string[] = [];
 
     for (const log of logs) {
@@ -59,27 +228,18 @@ serve(async (req) => {
         continue;
       }
 
-      // Mark as transcribing
-      await supabase
-        .from("voice_logs")
-        .update({ status: "transcribing" })
-        .eq("id", log.id);
+      await supabase.from("voice_logs").update({ status: "transcribing" }).eq("id", log.id);
 
-      // Download audio from storage
       const { data: audioData, error: downloadError } = await supabase.storage
         .from("recordings")
         .download(log.audio_path);
 
       if (downloadError || !audioData) {
         console.error("Failed to download audio:", downloadError);
-        await supabase
-          .from("voice_logs")
-          .update({ status: "error" })
-          .eq("id", log.id);
+        await supabase.from("voice_logs").update({ status: "error" }).eq("id", log.id);
         continue;
       }
 
-      // Convert audio to base64 for AI (chunked to avoid stack overflow)
       const arrayBuffer = await audioData.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
       let binary = "";
@@ -89,7 +249,6 @@ serve(async (req) => {
       }
       const base64Audio = btoa(binary);
 
-      // Transcribe via Lovable AI (Gemini supports audio)
       const transcribeResponse = await fetch(
         "https://ai.gateway.lovable.dev/v1/chat/completions",
         {
@@ -103,23 +262,13 @@ serve(async (req) => {
             messages: [
               {
                 role: "system",
-                content:
-                  "You are a transcription engine for construction site voice logs. Transcribe the audio exactly as spoken. Output ONLY the transcription text, no commentary.",
+                content: "You are a transcription engine for construction site voice logs. Transcribe the audio exactly as spoken. Output ONLY the transcription text, no commentary.",
               },
               {
                 role: "user",
                 content: [
-                  {
-                    type: "input_audio",
-                    input_audio: {
-                      data: base64Audio,
-                      format: "webm",
-                    },
-                  },
-                  {
-                    type: "text",
-                    text: "Transcribe this construction site voice log.",
-                  },
+                  { type: "input_audio", input_audio: { data: base64Audio, format: "webm" } },
+                  { type: "text", text: "Transcribe this construction site voice log." },
                 ],
               },
             ],
@@ -139,28 +288,19 @@ serve(async (req) => {
         }
         if (transcribeResponse.status === 402) {
           return new Response(
-            JSON.stringify({ error: "AI credits exhausted. Please add funds." }),
+            JSON.stringify({ error: "AI credits exhausted." }),
             { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        await supabase
-          .from("voice_logs")
-          .update({ status: "error" })
-          .eq("id", log.id);
+        await supabase.from("voice_logs").update({ status: "error" }).eq("id", log.id);
         continue;
       }
 
       const transcribeResult = await transcribeResponse.json();
-      const transcript =
-        transcribeResult.choices?.[0]?.message?.content?.trim() || "";
+      const transcript = transcribeResult.choices?.[0]?.message?.content?.trim() || "";
 
-      // Save transcript
-      await supabase
-        .from("voice_logs")
-        .update({ transcript, status: "transcribed" })
-        .eq("id", log.id);
-
+      await supabase.from("voice_logs").update({ transcript, status: "transcribed" }).eq("id", log.id);
       transcripts.push(transcript);
     }
 
@@ -171,12 +311,9 @@ serve(async (req) => {
       );
     }
 
-    // Step 3: Generate structured report from all transcripts
-    const today = new Date().toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
+    // Generate report
+    const todayStr = new Date().toLocaleDateString("en-US", {
+      weekday: "long", month: "long", day: "numeric", year: "numeric",
     });
 
     const reportResponse = await fetch(
@@ -224,7 +361,7 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
             },
             {
               role: "user",
-              content: `Generate a daily site report for ${today} from these ${transcripts.length} voice log transcriptions:\n\n${transcripts
+              content: `Generate a daily site report for ${todayStr} from these ${transcripts.length} voice log transcriptions:\n\n${transcripts
                 .map((t, i) => `--- Log ${i + 1} ---\n${t}`)
                 .join("\n\n")}`,
             },
@@ -243,23 +380,93 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
     }
 
     const reportResult = await reportResponse.json();
-    const reportContent =
-      reportResult.choices?.[0]?.message?.content?.trim() || "";
+    const reportContent = reportResult.choices?.[0]?.message?.content?.trim() || "";
 
-    // Save report
-    const { data: report, error: reportError } = await supabase
+    // Generate PDF
+    const reportDate = new Date().toISOString().split("T")[0];
+    const pdfBytes = generatePdfBytes(`SiteLog Daily Report — ${todayStr}`, reportContent);
+    const pdfPath = `${reportDate}/${user_id}.pdf`;
+
+    // Upload PDF (upsert via overwrite)
+    const { error: pdfUploadError } = await supabase.storage
+      .from("report-pdfs")
+      .upload(pdfPath, pdfBytes, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+
+    if (pdfUploadError) {
+      console.error("PDF upload failed:", pdfUploadError);
+    }
+
+    const pdfUrl = `${supabaseUrl}/storage/v1/object/public/report-pdfs/${pdfPath}`;
+
+    // Upsert daily_reports
+    const { data: existingReport } = await supabase
       .from("daily_reports")
-      .insert({
-        content: reportContent,
-        log_ids: log_ids,
-        report_date: new Date().toISOString().split("T")[0],
-      })
-      .select()
-      .single();
+      .select("id")
+      .eq("user_id", user_id)
+      .eq("report_date", reportDate)
+      .maybeSingle();
 
-    if (reportError) throw reportError;
+    let report;
+    if (existingReport) {
+      const { data, error } = await supabase
+        .from("daily_reports")
+        .update({ content: reportContent, log_ids: log_ids, pdf_url: pdfUrl })
+        .eq("id", existingReport.id)
+        .select()
+        .single();
+      if (error) throw error;
+      report = data;
+    } else {
+      const { data, error } = await supabase
+        .from("daily_reports")
+        .insert({
+          content: reportContent,
+          log_ids: log_ids,
+          report_date: reportDate,
+          user_id: user_id,
+          pdf_url: pdfUrl,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      report = data;
+    }
 
-    return new Response(JSON.stringify({ report }), {
+    // Upsert admin_reports
+    const { data: existingAdmin } = await supabase
+      .from("admin_reports")
+      .select("id, status")
+      .eq("user_id", user_id)
+      .eq("report_date", reportDate)
+      .maybeSingle();
+
+    if (existingAdmin) {
+      const updateData: Record<string, string> = {
+        pdf_url: pdfUrl,
+        user_email: userEmail,
+      };
+      // Don't overwrite status if already 'sent'
+      if (existingAdmin.status !== "sent") {
+        updateData.status = "pending_sent";
+      }
+      await supabase
+        .from("admin_reports")
+        .update(updateData)
+        .eq("id", existingAdmin.id);
+    } else {
+      await supabase.from("admin_reports").insert({
+        user_id,
+        user_email: userEmail,
+        report_date: reportDate,
+        pdf_url: pdfUrl,
+        status: "pending_sent",
+      });
+    }
+
+    return new Response(JSON.stringify({ report: { ...report, pdf_url: pdfUrl } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

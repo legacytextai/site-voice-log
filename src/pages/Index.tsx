@@ -2,7 +2,9 @@ import { useState } from "react";
 import RecordButton from "@/components/RecordButton";
 import LogList from "@/components/LogList";
 import ReportSection from "@/components/ReportSection";
+import EmailEntry from "@/components/EmailEntry";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/integrations/supabase/client";
 
 const today = () =>
@@ -14,13 +16,17 @@ const today = () =>
   });
 
 const Index = () => {
-  const { isRecording, entries, toggleRecording } = useVoiceRecorder();
+  const { user, login, isLoading: userLoading } = useUser();
+  const { isRecording, entries, toggleRecording } = useVoiceRecorder(user?.id ?? null);
   const [report, setReport] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerateReport = async () => {
+    if (!user) return;
     setIsGenerating(true);
     setReport(null);
+    setPdfUrl(null);
 
     const savedIds = entries
       .filter((e) => e.status === "saved")
@@ -29,11 +35,12 @@ const Index = () => {
     try {
       const { data, error } = await supabase.functions.invoke(
         "generate-report",
-        { body: { log_ids: savedIds } }
+        { body: { log_ids: savedIds, user_id: user.id } }
       );
 
       if (error) throw error;
       setReport(data.report.content);
+      setPdfUrl(data.report.pdf_url || null);
     } catch (err) {
       console.error("Report generation failed:", err);
       setReport("Error generating report. Please try again.");
@@ -41,6 +48,18 @@ const Index = () => {
       setIsGenerating(false);
     }
   };
+
+  if (userLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <EmailEntry onLogin={login} />;
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -60,6 +79,8 @@ const Index = () => {
         <ReportSection
           entries={entries}
           report={report}
+          pdfUrl={pdfUrl}
+          userEmail={user.email}
           isGenerating={isGenerating}
           onGenerate={handleGenerateReport}
         />

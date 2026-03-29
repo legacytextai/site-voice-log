@@ -81,8 +81,7 @@ const Index = () => {
   }
 
   if (!user) {
-    return <EmailEntry onLogin={login} />;
-  }
+    return <EmailEntry onLogin={handleLogin} />;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

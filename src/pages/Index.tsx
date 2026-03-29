@@ -24,6 +24,25 @@ const Index = () => {
   const [report, setReport] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const justLoggedInRef = useRef(false);
+
+  const handleLogin = async (email: string) => {
+    await login(email);
+    justLoggedInRef.current = true;
+  };
+
+  useEffect(() => {
+    if (user && justLoggedInRef.current && !localStorage.getItem("sitelog_onboarding_seen")) {
+      justLoggedInRef.current = false;
+      setShowOnboarding(true);
+    }
+  }, [user]);
+
+  const dismissOnboarding = () => {
+    localStorage.setItem("sitelog_onboarding_seen", "true");
+    setShowOnboarding(false);
+  };
 
   const handleGenerateReport = async () => {
     if (!user) return;

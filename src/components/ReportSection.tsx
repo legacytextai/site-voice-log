@@ -6,6 +6,7 @@ interface ReportSectionProps {
   report: string | null;
   pdfUrl: string | null;
   userEmail: string;
+  projectName: string;
   isGenerating: boolean;
   onGenerate: () => void;
 }
@@ -23,6 +24,7 @@ const ReportSection = ({
   report,
   pdfUrl,
   userEmail,
+  projectName,
   isGenerating,
   onGenerate,
 }: ReportSectionProps) => {
@@ -40,7 +42,7 @@ const ReportSection = ({
 
   const handleEmail = () => {
     if (!report) return;
-    const subject = encodeURIComponent(`SiteLog Daily Report – ${todayFormatted()}`);
+    const subject = encodeURIComponent(`SiteLog Daily Report – ${projectName} – ${todayFormatted()}`);
     const pdfLine = pdfUrl ? `\n\n---\nDownload PDF: ${pdfUrl}` : "";
     const body = encodeURIComponent(report + pdfLine);
     window.open(`mailto:${userEmail}?subject=${subject}&body=${body}`, "_self");

@@ -159,7 +159,8 @@ serve(async (req) => {
   }
 
   try {
-    const { log_ids, user_id } = await req.json();
+    const { log_ids, user_id, project_name } = await req.json();
+    const projectName = (project_name || "").trim() || "Untitled Project";
 
     if (!log_ids || !Array.isArray(log_ids) || log_ids.length === 0) {
       return new Response(
@@ -333,6 +334,7 @@ serve(async (req) => {
 
 Output format:
 DAILY SITE REPORT — [DATE]
+PROJECT: [PROJECT NAME]
 
 WEATHER & CONDITIONS:
 (Infer from context or state "Not reported")
@@ -361,7 +363,7 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
             },
             {
               role: "user",
-              content: `Generate a daily site report for ${todayStr} from these ${transcripts.length} voice log transcriptions:\n\n${transcripts
+              content: `Generate a daily site report for ${todayStr}.\nPROJECT: ${projectName}\n\nVoice log transcriptions (${transcripts.length}):\n\n${transcripts
                 .map((t, i) => `--- Log ${i + 1} ---\n${t}`)
                 .join("\n\n")}`,
             },
@@ -384,7 +386,7 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
 
     // Generate PDF
     const reportDate = new Date().toISOString().split("T")[0];
-    const pdfBytes = generatePdfBytes(`SiteLog Daily Report — ${todayStr}`, reportContent);
+    const pdfBytes = generatePdfBytes(`SiteLog Daily Report — ${projectName} — ${todayStr}`, reportContent);
     const pdfPath = `${reportDate}/${user_id}.pdf`;
 
     // Upload PDF (upsert via overwrite)
@@ -447,6 +449,7 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
       const updateData: Record<string, string> = {
         pdf_url: pdfUrl,
         user_email: userEmail,
+        project_name: projectName,
       };
       // Don't overwrite status if already 'sent'
       if (existingAdmin.status !== "sent") {
@@ -462,6 +465,7 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
         user_email: userEmail,
         report_date: reportDate,
         pdf_url: pdfUrl,
+        project_name: projectName,
         status: "pending_sent",
       });
     }

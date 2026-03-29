@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface User {
   id: string;
   email: string;
+  project_name: string | null;
 }
 
 const STORAGE_KEY = "sitelog_user_id";
@@ -21,14 +22,14 @@ export function useUser() {
 
     supabase
       .from("users")
-      .select("id, email")
+      .select("id, email, project_name")
       .eq("id", storedId)
       .single()
       .then(({ data, error }) => {
         if (error || !data) {
           localStorage.removeItem(STORAGE_KEY);
         } else {
-          setUser({ id: data.id, email: data.email });
+          setUser({ id: data.id, email: data.email, project_name: data.project_name });
         }
         setIsLoading(false);
       });
@@ -40,15 +41,26 @@ export function useUser() {
 
     const { data, error } = await supabase
       .from("users")
-      .select("id, email")
+      .select("id, email, project_name")
       .eq("email", email)
       .single();
 
     if (error || !data) throw new Error("Failed to create user");
 
     localStorage.setItem(STORAGE_KEY, data.id);
-    setUser({ id: data.id, email: data.email });
+    setUser({ id: data.id, email: data.email, project_name: data.project_name });
   }, []);
 
-  return { user, login, isLoading };
+  const updateProjectName = useCallback(async (name: string) => {
+    if (!user) return;
+    const { error } = await supabase
+      .from("users")
+      .update({ project_name: name })
+      .eq("id", user.id);
+    if (!error) {
+      setUser((prev) => prev ? { ...prev, project_name: name } : prev);
+    }
+  }, [user]);
+
+  return { user, login, updateProjectName, isLoading };
 }

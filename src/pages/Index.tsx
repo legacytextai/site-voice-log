@@ -3,6 +3,7 @@ import RecordButton from "@/components/RecordButton";
 import LogList from "@/components/LogList";
 import ReportSection from "@/components/ReportSection";
 import EmailEntry from "@/components/EmailEntry";
+import ProjectField from "@/components/ProjectField";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,7 +17,7 @@ const today = () =>
   });
 
 const Index = () => {
-  const { user, login, isLoading: userLoading } = useUser();
+  const { user, login, updateProjectName, isLoading: userLoading } = useUser();
   const { isRecording, entries, toggleRecording } = useVoiceRecorder(user?.id ?? null);
   const [report, setReport] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -33,9 +34,10 @@ const Index = () => {
       .map((e) => e.id);
 
     try {
+      const projectName = user.project_name?.trim() || "Untitled Project";
       const { data, error } = await supabase.functions.invoke(
         "generate-report",
-        { body: { log_ids: savedIds, user_id: user.id } }
+        { body: { log_ids: savedIds, user_id: user.id, project_name: projectName } }
       );
 
       if (error) throw error;
@@ -63,11 +65,12 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="px-5 pt-12 pb-6">
+      <header className="px-5 pt-12 pb-6 space-y-4">
         <h1 className="text-lg font-bold text-foreground tracking-tight">
           SiteLog
         </h1>
-        <p className="text-xs text-muted-foreground mt-0.5">{today()}</p>
+        <ProjectField value={user.project_name} onSave={updateProjectName} />
+        <p className="text-xs text-muted-foreground">{today()}</p>
       </header>
 
       <div className="flex-1 flex items-center justify-center px-5">
@@ -81,6 +84,7 @@ const Index = () => {
           report={report}
           pdfUrl={pdfUrl}
           userEmail={user.email}
+          projectName={user.project_name?.trim() || "Untitled Project"}
           isGenerating={isGenerating}
           onGenerate={handleGenerateReport}
         />

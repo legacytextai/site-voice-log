@@ -82,9 +82,26 @@ const Index = () => {
 
   if (!user) {
     return <EmailEntry onLogin={handleLogin} />;
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <Dialog open={showOnboarding} onOpenChange={(open) => { if (!open) dismissOnboarding(); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Quick Start — Just Tap to Record</DialogTitle>
+            <DialogDescription asChild>
+              <ol className="list-decimal list-inside space-y-2 pt-2 text-sm text-muted-foreground">
+                <li>Talk your daily updates into the app (use normal language)</li>
+                <li>Add updates throughout the day (each one is saved)</li>
+                <li>Click Generate Report before leaving (PDF sent automatically)</li>
+              </ol>
+            </DialogDescription>
+          </DialogHeader>
+          <Button onClick={dismissOnboarding} className="w-full mt-2">Got It</Button>
+        </DialogContent>
+      </Dialog>
+
       <header className="px-5 pt-12 pb-6 space-y-4">
         <h1 className="text-lg font-bold text-foreground tracking-tight">
           SiteLog

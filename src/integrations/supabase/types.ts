@@ -14,7 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      daily_reports: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          log_ids: string[]
+          report_date: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          log_ids: string[]
+          report_date?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          log_ids?: string[]
+          report_date?: string
+        }
+        Relationships: []
+      }
+      voice_logs: {
+        Row: {
+          audio_path: string
+          created_at: string
+          duration_seconds: number
+          id: string
+          recorded_at: string
+          status: string
+          transcript: string | null
+        }
+        Insert: {
+          audio_path: string
+          created_at?: string
+          duration_seconds: number
+          id?: string
+          recorded_at?: string
+          status?: string
+          transcript?: string | null
+        }
+        Update: {
+          audio_path?: string
+          created_at?: string
+          duration_seconds?: number
+          id?: string
+          recorded_at?: string
+          status?: string
+          transcript?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

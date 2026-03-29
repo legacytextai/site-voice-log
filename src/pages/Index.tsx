@@ -19,7 +19,7 @@ const today = () =>
   });
 
 const Index = () => {
-  const { user, login, updateProjectName, isLoading: userLoading } = useUser();
+  const { user, login, logout, updateProjectName, isLoading: userLoading } = useUser();
   const { isRecording, entries, toggleRecording } = useVoiceRecorder(user?.id ?? null);
   const [report, setReport] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -103,9 +103,14 @@ const Index = () => {
       </Dialog>
 
       <header className="px-5 pt-12 pb-6 space-y-4">
-        <h1 className="text-lg font-bold text-foreground tracking-tight">
-          SiteLog
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold text-foreground tracking-tight">
+            SiteLog
+          </h1>
+          <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-muted-foreground">
+            Sign Out
+          </Button>
+        </div>
         <ProjectField value={user.project_name} onSave={updateProjectName} />
         <p className="text-xs text-muted-foreground">{today()}</p>
       </header>

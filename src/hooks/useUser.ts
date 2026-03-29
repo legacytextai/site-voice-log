@@ -62,5 +62,11 @@ export function useUser() {
     }
   }, [user]);
 
-  return { user, login, updateProjectName, isLoading };
+  const logout = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem("sitelog_onboarding_seen");
+    setUser(null);
+  }, []);
+
+  return { user, login, logout, updateProjectName, isLoading };
 }

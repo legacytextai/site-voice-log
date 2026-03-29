@@ -1,13 +1,25 @@
 
 
-## Plan: Fix Onboarding Dialog Mobile Overflow
+## Plan: Add Sign Out Button
 
-### Problem
-The onboarding dialog extends edge-to-edge on small screens, cutting off text on the sides (visible in the iPhone screenshot — step 3 text is clipped).
+### What happens
+- "Sign Out" clears localStorage (user ID + onboarding flag) and returns to email entry screen
+- Re-entering the same email loads the existing user and all their data
+- Re-entering a new email triggers onboarding again
 
-### Fix — `src/pages/Index.tsx`
+### Changes
 
-Change the `DialogContent` className from `max-w-sm` to `max-w-[calc(100vw-2rem)] sm:max-w-sm` so it respects a 1rem margin on each side on mobile. This ensures the dialog never exceeds viewport width minus comfortable padding.
+**`src/hooks/useUser.ts`** — Add `logout` callback:
+- Removes `sitelog_user_id` and `sitelog_onboarding_seen` from localStorage
+- Sets user state to `null`
 
-One line change.
+**`src/pages/Index.tsx`** — Add sign out button:
+- Small ghost-style "Sign Out" text button in the header (top-right)
+- Calls `logout()` on click
+
+### Files
+| File | Change |
+|------|--------|
+| `src/hooks/useUser.ts` | Add `logout` function |
+| `src/pages/Index.tsx` | Render sign out button in header |
 

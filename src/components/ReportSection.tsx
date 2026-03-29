@@ -52,7 +52,7 @@ const ReportSection = ({
     if (!pdfUrl) return;
     const a = document.createElement("a");
     a.href = pdfUrl;
-    a.download = `SiteLog_Report_${new Date().toISOString().split("T")[0]}.pdf`;
+    a.download = `${projectName}_Daily Report_${new Date().toISOString().split("T")[0]}.pdf`;
     a.target = "_blank";
     a.click();
   };

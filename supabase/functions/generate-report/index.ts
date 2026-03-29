@@ -387,7 +387,8 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
     // Generate PDF
     const reportDate = new Date().toISOString().split("T")[0];
     const pdfBytes = generatePdfBytes(`SiteLog Daily Report — ${projectName} — ${todayStr}`, reportContent);
-    const pdfPath = `${reportDate}/${user_id}.pdf`;
+    const sanitizedName = projectName.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
+    const pdfPath = `${reportDate}/${sanitizedName}_Daily Report_${reportDate}.pdf`;
 
     // Upload PDF (upsert via overwrite)
     const { error: pdfUploadError } = await supabase.storage

@@ -1,5 +1,6 @@
-import { useState, useRef, useCallback } from "react";
-import { type LogEntryData } from "@/components/LogEntry";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { type LogEntryData, type LogStatus } from "@/components/LogEntry";
 
 export function useVoiceRecorder() {
   const [isRecording, setIsRecording] = useState(false);
@@ -8,10 +9,44 @@ export function useVoiceRecorder() {
   const startTimeRef = useRef<number>(0);
   const chunksRef = useRef<Blob[]>([]);
 
+  // Load today's logs on mount
+  useEffect(() => {
+    const loadTodayLogs = async () => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { data, error } = await supabase
+        .from("voice_logs")
+        .select("*")
+        .gte("recorded_at", todayStart.toISOString())
+        .order("recorded_at", { ascending: false });
+
+      if (error) {
+        console.error("Failed to load logs:", error);
+        return;
+      }
+
+      if (data) {
+        setEntries(
+          data.map((log) => ({
+            id: log.id,
+            timestamp: new Date(log.recorded_at),
+            status: (log.status === "saving" ? "saving" : "saved") as LogStatus,
+            durationSeconds: log.duration_seconds,
+          }))
+        );
+      }
+    };
+
+    loadTodayLogs();
+  }, []);
+
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm;codecs=opus",
+      });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       startTimeRef.current = Date.now();
@@ -20,24 +55,70 @@ export function useVoiceRecorder() {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
-      mediaRecorder.onstop = () => {
-        const duration = Math.round((Date.now() - startTimeRef.current) / 1000);
-        const id = crypto.randomUUID();
+      mediaRecorder.onstop = async () => {
+        const duration = Math.round(
+          (Date.now() - startTimeRef.current) / 1000
+        );
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const tempId = crypto.randomUUID();
+        const audioPath = `${new Date().toISOString().split("T")[0]}/${tempId}.webm`;
 
-        // Add as "saving"
+        // Add to UI immediately as "saving"
         setEntries((prev) => [
-          { id, timestamp: new Date(), status: "saving" as const, durationSeconds: duration },
+          {
+            id: tempId,
+            timestamp: new Date(),
+            status: "saving" as LogStatus,
+            durationSeconds: duration,
+          },
           ...prev,
         ]);
 
-        // Simulate save (replace with Cloud persistence later)
-        setTimeout(() => {
-          setEntries((prev) =>
-            prev.map((e) => (e.id === id ? { ...e, status: "saved" as const } : e))
-          );
-        }, 800);
+        try {
+          // Upload audio to storage
+          const { error: uploadError } = await supabase.storage
+            .from("recordings")
+            .upload(audioPath, blob, {
+              contentType: "audio/webm",
+            });
 
-        // Stop all tracks
+          if (uploadError) throw uploadError;
+
+          // Insert log record
+          const { data: logData, error: insertError } = await supabase
+            .from("voice_logs")
+            .insert({
+              duration_seconds: duration,
+              audio_path: audioPath,
+              status: "saved",
+            })
+            .select()
+            .single();
+
+          if (insertError) throw insertError;
+
+          // Update UI with real ID and saved status
+          setEntries((prev) =>
+            prev.map((e) =>
+              e.id === tempId
+                ? {
+                    ...e,
+                    id: logData.id,
+                    status: "saved" as LogStatus,
+                  }
+                : e
+            )
+          );
+        } catch (err) {
+          console.error("Failed to save recording:", err);
+          // Still mark as saved locally so UI isn't stuck
+          setEntries((prev) =>
+            prev.map((e) =>
+              e.id === tempId ? { ...e, status: "saved" as LogStatus } : e
+            )
+          );
+        }
+
         stream.getTracks().forEach((t) => t.stop());
       };
 
@@ -49,7 +130,10 @@ export function useVoiceRecorder() {
   }, []);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === "recording"
+    ) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }

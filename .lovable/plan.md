@@ -1,26 +1,24 @@
 
 
-## Plan: Fix iOS Safari Auto-Zoom on Input Focus
+## Plan: Rename PDF Files to `[ProjectName]_Daily Report_[Date].pdf`
 
-### Problem
-iOS Safari automatically zooms in when a user focuses an input with a font-size smaller than 16px. The page stays zoomed after submission, causing the onboarding dialog to appear clipped.
+### Changes
 
-### Fix — `index.html`
+**`supabase/functions/generate-report/index.ts`** — Update the `pdfPath` variable:
 
-Update the viewport meta tag to prevent iOS auto-zoom:
+Current: `${reportDate}/${user_id}.pdf`  
+New: `${reportDate}/${sanitizedProjectName}_Daily Report_${reportDate}.pdf`
 
-```html
-<!-- Before -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+Sanitize the project name by replacing non-alphanumeric characters (except spaces/hyphens) and trimming, to ensure valid file paths.
 
-<!-- After -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-```
+**`src/components/ReportSection.tsx`** — Update the download filename:
+
+Current: `SiteLog_Report_${date}.pdf`  
+New: `${projectName}_Daily Report_${date}.pdf`
 
 ### Files
 | File | Change |
 |------|--------|
-| `index.html` | Add `maximum-scale=1.0` to viewport meta tag |
-
-One-line change. This prevents iOS from zooming on input focus while keeping the page responsive.
+| `supabase/functions/generate-report/index.ts` | Update `pdfPath` to use `[ProjectName]_Daily Report_[Date].pdf` |
+| `src/components/ReportSection.tsx` | Update `a.download` filename to match |
 

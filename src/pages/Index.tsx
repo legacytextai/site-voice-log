@@ -9,6 +9,7 @@ import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const today = () =>
   new Date().toLocaleDateString("en-US", {

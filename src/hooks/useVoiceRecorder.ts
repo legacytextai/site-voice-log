@@ -172,7 +172,7 @@ export function useVoiceRecorder(userId: string | null, userEmail?: string | nul
       };
 
       addDebug("[8] Calling recorder.start()");
-      mediaRecorder.start();
+      mediaRecorder.start(1000);
       addDebug(`[9] Recorder started, state: ${mediaRecorder.state}`);
       setIsRecording(true);
     } catch (err: unknown) {

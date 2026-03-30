@@ -9,6 +9,7 @@ import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const today = () =>
   new Date().toLocaleDateString("en-US", {
@@ -20,7 +21,8 @@ const today = () =>
 
 const Index = () => {
   const { user, login, logout, updateProjectName, isLoading: userLoading } = useUser();
-  const { isRecording, entries, toggleRecording } = useVoiceRecorder(user?.id ?? null);
+  const { isRecording, entries, toggleRecording, debugLogs } = useVoiceRecorder(user?.id ?? null);
+  const [showDebug, setShowDebug] = useState(false);
   const [report, setReport] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -107,9 +109,14 @@ const Index = () => {
           <h1 className="text-lg font-bold text-foreground tracking-tight">
             SiteLog
           </h1>
-          <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-muted-foreground">
-            Sign Out
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setShowDebug((v) => !v)} className="text-xs text-muted-foreground">
+              {showDebug ? "Hide Debug" : "Debug"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-muted-foreground">
+              Sign Out
+            </Button>
+          </div>
         </div>
         <ProjectField value={user.project_name} onSave={updateProjectName} />
         <p className="text-xs text-muted-foreground">{today()}</p>
@@ -131,6 +138,21 @@ const Index = () => {
           onGenerate={handleGenerateReport}
         />
       </div>
+      {showDebug && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/90 text-green-400 p-3 max-h-[40vh]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider">Debug Log ({debugLogs.length})</span>
+            <Button variant="ghost" size="sm" onClick={() => setShowDebug(false)} className="text-green-400 text-xs h-6 px-2">Close</Button>
+          </div>
+          <ScrollArea className="h-[calc(40vh-3rem)]">
+            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all space-y-0.5">
+              {debugLogs.length === 0 ? "No logs yet. Tap record to start." : debugLogs.map((log, i) => (
+                <div key={i} className={log.includes("[ERR]") ? "text-red-400" : ""}>{log}</div>
+              ))}
+            </pre>
+          </ScrollArea>
+        </div>
+      )}
     </div>
   );
 };

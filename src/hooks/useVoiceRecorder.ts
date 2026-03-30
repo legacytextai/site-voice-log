@@ -5,9 +5,17 @@ import { type LogEntryData, type LogStatus } from "@/components/LogEntry";
 export function useVoiceRecorder(userId: string | null) {
   const [isRecording, setIsRecording] = useState(false);
   const [entries, setEntries] = useState<LogEntryData[]>([]);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const startTimeRef = useRef<number>(0);
   const chunksRef = useRef<Blob[]>([]);
+
+  const addDebug = useCallback((msg: string) => {
+    const ts = new Date().toISOString().slice(11, 23);
+    const line = `[${ts}] ${msg}`;
+    console.log("[DEBUG]", line);
+    setDebugLogs((prev) => [...prev, line]);
+  }, []);
 
   // Load today's logs on mount (filtered by userId)
   useEffect(() => {
@@ -47,17 +55,41 @@ export function useVoiceRecorder(userId: string | null) {
   const startRecording = useCallback(async () => {
     if (!userId) return;
 
+    addDebug("[1] Record button clicked");
+    addDebug(`[2] UserAgent: ${navigator.userAgent}`);
+    addDebug(`[2] MediaRecorder exists: ${typeof MediaRecorder !== "undefined"}`);
+
+    if (typeof MediaRecorder !== "undefined") {
+      addDebug(`[3] isTypeSupported("audio/webm;codecs=opus"): ${MediaRecorder.isTypeSupported("audio/webm;codecs=opus")}`);
+      addDebug(`[3] isTypeSupported("audio/mp4"): ${MediaRecorder.isTypeSupported("audio/mp4")}`);
+      addDebug(`[3] isTypeSupported("audio/aac"): ${MediaRecorder.isTypeSupported("audio/aac")}`);
+    } else {
+      addDebug("[3] MediaRecorder not available — skipping isTypeSupported checks");
+    }
+
     try {
+      addDebug("[4] Requesting microphone access...");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      addDebug(`[5] Microphone stream acquired (tracks: ${stream.getAudioTracks().length})`);
+
+      addDebug('[6] Creating MediaRecorder with "audio/webm;codecs=opus"');
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: "audio/webm;codecs=opus",
       });
+      addDebug("[7] MediaRecorder created successfully");
+
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       startTimeRef.current = Date.now();
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onerror = (e) => {
+        const errEvent = e as Event & { error?: DOMException };
+        addDebug(`[ERR] MediaRecorder.onerror: ${errEvent.error?.name ?? "unknown"}: ${errEvent.error?.message ?? "unknown"}`);
+        console.error("MediaRecorder onerror:", errEvent.error);
       };
 
       mediaRecorder.onstop = async () => {
@@ -117,12 +149,16 @@ export function useVoiceRecorder(userId: string | null) {
         stream.getTracks().forEach((t) => t.stop());
       };
 
+      addDebug("[8] Calling recorder.start()");
       mediaRecorder.start();
+      addDebug(`[9] Recorder started, state: ${mediaRecorder.state}`);
       setIsRecording(true);
-    } catch (err) {
-      console.error("Microphone access denied:", err);
+    } catch (err: unknown) {
+      const error = err as Error;
+      addDebug(`[ERR] ${error.name}: ${error.message}`);
+      console.error("Recording failed:", err);
     }
-  }, [userId]);
+  }, [userId, addDebug]);
 
   const stopRecording = useCallback(() => {
     if (
@@ -142,5 +178,5 @@ export function useVoiceRecorder(userId: string | null) {
     }
   }, [isRecording, startRecording, stopRecording]);
 
-  return { isRecording, entries, toggleRecording };
+  return { isRecording, entries, toggleRecording, debugLogs };
 }

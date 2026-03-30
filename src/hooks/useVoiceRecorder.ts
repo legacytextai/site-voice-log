@@ -221,5 +221,5 @@ export function useVoiceRecorder(userId: string | null, userEmail?: string | nul
     }
   }, [isRecording, startRecording, stopRecording]);
 
-  return { isRecording, entries, toggleRecording, debugLogs };
+  return { isRecording, entries, toggleRecording, deleteEntry, debugLogs };
 }

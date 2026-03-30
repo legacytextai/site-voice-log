@@ -127,7 +127,7 @@ const Index = () => {
       </div>
 
       <div className="px-5 pb-8 space-y-6">
-        <LogList entries={entries} />
+        <LogList entries={entries} onDelete={deleteEntry} />
         <ReportSection
           entries={entries}
           report={report}

@@ -182,6 +182,27 @@ export function useVoiceRecorder(userId: string | null, userEmail?: string | nul
     }
   }, [userId, addDebug]);
 
+  const deleteEntry = useCallback(async (entryId: string) => {
+    if (!userId) return;
+    try {
+      // Fetch the audio_path before deleting
+      const { data: logData } = await supabase
+        .from("voice_logs")
+        .select("audio_path")
+        .eq("id", entryId)
+        .single();
+
+      if (logData?.audio_path) {
+        await supabase.storage.from("recordings").remove([logData.audio_path]);
+      }
+
+      await supabase.from("voice_logs").delete().eq("id", entryId);
+      setEntries((prev) => prev.filter((e) => e.id !== entryId));
+    } catch (err) {
+      console.error("Failed to delete recording:", err);
+    }
+  }, [userId]);
+
   const stopRecording = useCallback(() => {
     if (
       mediaRecorderRef.current &&

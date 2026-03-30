@@ -1,32 +1,33 @@
 
 
-## Plan: Implement mimeType Fallback with Runtime Detection
+## Plan: Store Transcripts as Text Files in Storage Bucket
 
-### `src/hooks/useVoiceRecorder.ts`
+### Overview
+Create a `transcripts` storage bucket and save each voice log transcript as a `.txt` file organized by date and user email: `YYYY-MM-DD/{user-email}/transcript-{log-id}.txt`.
 
-**1. Add ref and helper:**
-- Add `selectedMimeRef = useRef<string>("")`
-- Add helper function to derive extension/contentType from a mimeType string:
-  - Contains `mp4` → `.mp4` / `audio/mp4`
-  - Contains `webm` → `.webm` / `audio/webm`
-  - Default → `.webm` / `audio/webm`
+### Changes
 
-**2. Replace hardcoded mimeType selection (around lines 75-82):**
-- Check `isTypeSupported` in order: `audio/webm;codecs=opus` → `audio/mp4`
-- If one matches, create `new MediaRecorder(stream, { mimeType: selected })`, store in `selectedMimeRef`
-- If neither supported, create `new MediaRecorder(stream)` with no options, then read `mediaRecorder.mimeType` from the created instance and store that in `selectedMimeRef`
-- Log the final runtime mimeType to debug panel
+**1. Database migration — create storage bucket + RLS policies**
+```sql
+INSERT INTO storage.buckets (id, name, public) VALUES ('transcripts', 'transcripts', false);
 
-**3. Update `onstop` handler:**
-- Blob type: use `selectedMimeRef.current` (line ~99)
-- File extension: derive from `selectedMimeRef.current` using the helper
-- Upload `contentType`: derive from `selectedMimeRef.current` using the helper
-- Update `audioPath` to use dynamic extension instead of hardcoded `.webm`
+CREATE POLICY "Public read transcripts" ON storage.objects FOR SELECT TO public USING (bucket_id = 'transcripts');
+CREATE POLICY "Service insert transcripts" ON storage.objects FOR INSERT TO public WITH CHECK (bucket_id = 'transcripts');
+```
 
-### No other files change. Debug panel preserved as-is.
+**2. `supabase/functions/generate-report/index.ts`**
+After each transcript is produced (or read from existing data), upload it to the `transcripts` bucket:
+- Path format: `{YYYY-MM-DD}/{user-email}/{log-id}.txt`
+- Use the user email fetched from the `users` table (already available in the function)
+- Use the log's `recorded_at` date for the date folder
+- Upload with `contentType: "text/plain"` and `upsert: true`
+- Do this for every log in the batch — both newly transcribed and previously transcribed logs
+
+No other files change. Existing transcription, report generation, and upload logic remain untouched.
 
 ### Files
 | File | Change |
 |------|--------|
-| `src/hooks/useVoiceRecorder.ts` | mimeType negotiation with runtime detection, dynamic Blob/extension/contentType |
+| Migration SQL | Create `transcripts` bucket + RLS policies |
+| `supabase/functions/generate-report/index.ts` | After transcript is available, upload `.txt` file to `transcripts` bucket |
 

@@ -1,15 +1,15 @@
 
 
-## Plan: Make Transcripts Bucket Public
+## Plan: Make Recordings Bucket Public
 
-The simplest fix is to make the `transcripts` bucket public, just like `report-pdfs`. This will let you click on any file in Cloud → Storage and open/download it via a public URL.
+The `recordings` bucket is currently private, preventing downloads. We'll make it public so you can access files via direct URL.
 
 ### Changes
 
 **Database migration** — Update the bucket to public:
 ```sql
-UPDATE storage.buckets SET public = true WHERE id = 'transcripts';
+UPDATE storage.buckets SET public = true WHERE id = 'recordings';
 ```
 
-That's it — one migration, no code changes. After this, files in the bucket will be accessible via direct URL and downloadable from the Cloud storage view.
+One migration, no code changes. After this, recording files will be downloadable via direct URL from the Cloud storage view.
 

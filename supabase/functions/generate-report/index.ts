@@ -377,7 +377,7 @@ Rules:
       } else {
         const { data, error } = await supabase
           .from("daily_reports")
-          .insert({ content: emptyReport, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl })
+          .insert({ content: emptyReport, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl, user_email: userEmail })
           .select()
           .single();
         if (error) throw error;

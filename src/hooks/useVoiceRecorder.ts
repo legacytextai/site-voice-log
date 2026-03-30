@@ -131,7 +131,7 @@ export function useVoiceRecorder(userId: string | null) {
         try {
           const { error: uploadError } = await supabase.storage
             .from("recordings")
-            .upload(audioPath, blob, { contentType: "audio/webm" });
+            .upload(audioPath, blob, { contentType });
 
           if (uploadError) throw uploadError;
 

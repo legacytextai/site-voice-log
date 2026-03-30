@@ -87,8 +87,8 @@ export function useVoiceRecorder(userId: string | null) {
       };
 
       mediaRecorder.onerror = (e) => {
-        const errEvent = e as MediaRecorderErrorEvent;
-        addDebug(`[ERR] MediaRecorder.onerror: ${errEvent.error?.name}: ${errEvent.error?.message}`);
+        const errEvent = e as Event & { error?: DOMException };
+        addDebug(`[ERR] MediaRecorder.onerror: ${errEvent.error?.name ?? "unknown"}: ${errEvent.error?.message ?? "unknown"}`);
         console.error("MediaRecorder onerror:", errEvent.error);
       };
 

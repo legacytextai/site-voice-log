@@ -79,11 +79,21 @@ export function useVoiceRecorder(userId: string | null) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       addDebug(`[5] Microphone stream acquired (tracks: ${stream.getAudioTracks().length})`);
 
-      addDebug('[6] Creating MediaRecorder with "audio/webm;codecs=opus"');
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
-      });
-      addDebug("[7] MediaRecorder created successfully");
+      // Negotiate mimeType
+      let mediaRecorder: MediaRecorder;
+      const candidates = ["audio/webm;codecs=opus", "audio/mp4"];
+      const supported = candidates.find((m) => MediaRecorder.isTypeSupported(m));
+
+      if (supported) {
+        addDebug(`[6] Creating MediaRecorder with "${supported}"`);
+        mediaRecorder = new MediaRecorder(stream, { mimeType: supported });
+        selectedMimeRef.current = supported;
+      } else {
+        addDebug("[6] No preferred mimeType supported — using browser default");
+        mediaRecorder = new MediaRecorder(stream);
+        selectedMimeRef.current = mediaRecorder.mimeType || "";
+      }
+      addDebug(`[7] MediaRecorder created, runtime mimeType: "${mediaRecorder.mimeType}"`);
 
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];

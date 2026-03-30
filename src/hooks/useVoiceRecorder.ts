@@ -9,6 +9,13 @@ export function useVoiceRecorder(userId: string | null) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const startTimeRef = useRef<number>(0);
   const chunksRef = useRef<Blob[]>([]);
+  const selectedMimeRef = useRef<string>("");
+
+  const getMimeInfo = (mime: string) => {
+    if (mime.includes("mp4")) return { ext: ".mp4", contentType: "audio/mp4" };
+    if (mime.includes("webm")) return { ext: ".webm", contentType: "audio/webm" };
+    return { ext: ".webm", contentType: "audio/webm" };
+  };
 
   const addDebug = useCallback((msg: string) => {
     const ts = new Date().toISOString().slice(11, 23);
@@ -72,11 +79,21 @@ export function useVoiceRecorder(userId: string | null) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       addDebug(`[5] Microphone stream acquired (tracks: ${stream.getAudioTracks().length})`);
 
-      addDebug('[6] Creating MediaRecorder with "audio/webm;codecs=opus"');
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
-      });
-      addDebug("[7] MediaRecorder created successfully");
+      // Negotiate mimeType
+      let mediaRecorder: MediaRecorder;
+      const candidates = ["audio/webm;codecs=opus", "audio/mp4"];
+      const supported = candidates.find((m) => MediaRecorder.isTypeSupported(m));
+
+      if (supported) {
+        addDebug(`[6] Creating MediaRecorder with "${supported}"`);
+        mediaRecorder = new MediaRecorder(stream, { mimeType: supported });
+        selectedMimeRef.current = supported;
+      } else {
+        addDebug("[6] No preferred mimeType supported — using browser default");
+        mediaRecorder = new MediaRecorder(stream);
+        selectedMimeRef.current = mediaRecorder.mimeType || "";
+      }
+      addDebug(`[7] MediaRecorder created, runtime mimeType: "${mediaRecorder.mimeType}"`);
 
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -96,9 +113,10 @@ export function useVoiceRecorder(userId: string | null) {
         const duration = Math.round(
           (Date.now() - startTimeRef.current) / 1000
         );
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const { ext, contentType } = getMimeInfo(selectedMimeRef.current);
+        const blob = new Blob(chunksRef.current, { type: selectedMimeRef.current || "audio/webm" });
         const tempId = crypto.randomUUID();
-        const audioPath = `${new Date().toISOString().split("T")[0]}/${tempId}.webm`;
+        const audioPath = `${new Date().toISOString().split("T")[0]}/${tempId}${ext}`;
 
         setEntries((prev) => [
           {
@@ -113,7 +131,7 @@ export function useVoiceRecorder(userId: string | null) {
         try {
           const { error: uploadError } = await supabase.storage
             .from("recordings")
-            .upload(audioPath, blob, { contentType: "audio/webm" });
+            .upload(audioPath, blob, { contentType });
 
           if (uploadError) throw uploadError;
 

@@ -7,10 +7,21 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const SENTINEL_TRANSCRIPTS = [
+  "Recording too short for reliable transcription.",
+  "No usable audio detected.",
+  "Unclear or no speech detected.",
+  "Unreliable transcription — excluded from report.",
+];
+
+function isSentinel(transcript: string): boolean {
+  return SENTINEL_TRANSCRIPTS.includes(transcript.trim());
+}
+
 // Minimal PDF generator: produces a valid PDF with text content
 function generatePdfBytes(title: string, content: string): Uint8Array {
   const lines = content.split("\n");
-  const pageHeight = 842; // A4
+  const pageHeight = 842;
   const pageWidth = 595;
   const margin = 50;
   const lineHeight = 14;
@@ -18,13 +29,9 @@ function generatePdfBytes(title: string, content: string): Uint8Array {
   const usableHeight = pageHeight - 2 * margin;
   const linesPerPage = Math.floor(usableHeight / lineHeight);
 
-  // Word-wrap lines
   const wrappedLines: string[] = [];
   for (const line of lines) {
-    if (line.length === 0) {
-      wrappedLines.push("");
-      continue;
-    }
+    if (line.length === 0) { wrappedLines.push(""); continue; }
     let remaining = line;
     while (remaining.length > maxCharsPerLine) {
       let breakAt = remaining.lastIndexOf(" ", maxCharsPerLine);
@@ -35,14 +42,12 @@ function generatePdfBytes(title: string, content: string): Uint8Array {
     wrappedLines.push(remaining);
   }
 
-  // Split into pages
   const pages: string[][] = [];
   for (let i = 0; i < wrappedLines.length; i += linesPerPage) {
     pages.push(wrappedLines.slice(i, i + linesPerPage));
   }
   if (pages.length === 0) pages.push([""]);
 
-  // Escape PDF special chars
   const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 
   let objCount = 0;
@@ -55,69 +60,27 @@ function generatePdfBytes(title: string, content: string): Uint8Array {
     return objCount;
   };
 
-  // 1: Catalog
   addObj(`<< /Type /Catalog /Pages 2 0 R >>`);
 
-  // 2: Pages (placeholder, we'll fix references)
-  const pagesObjId = objCount + 1;
-  addObj(`<< /Type /Pages /Kids [${pages.map((_, i) => `${pagesObjId + 1 + i * 2} 0 R`).join(" ")}] /Count ${pages.length} >>`);
-
-  // 3: Font
-  const fontId = addObj(`<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>`);
-
-  // Page objects + content streams
-  for (const pageLines of pages) {
-    const textOps: string[] = [];
-    textOps.push("BT");
-    textOps.push(`/F1 10 Tf`);
-    textOps.push(`${margin} ${pageHeight - margin} Td`);
-    textOps.push(`0 -${lineHeight} Td`);
-
-    for (const line of pageLines) {
-      textOps.push(`(${esc(line)}) Tj`);
-      textOps.push(`0 -${lineHeight} Td`);
-    }
-    textOps.push("ET");
-
-    const stream = textOps.join("\n");
-    const streamId = addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-    // Page object (added after stream so IDs work out — but we pre-calculated in Pages kids)
-    // Actually let's restructure: page first, then stream
-  }
-
-  // Rebuild properly
-  objCount = 0;
-  objects.length = 0;
-
-  // Obj 1: Catalog
-  addObj(`<< /Type /Catalog /Pages 2 0 R >>`);
-
-  // Calculate object IDs: font=3, then for each page: pageObj, contentStream
   const fontObjId = 3;
   const pageObjIds: number[] = [];
   for (let i = 0; i < pages.length; i++) {
-    pageObjIds.push(4 + i * 2); // page obj
+    pageObjIds.push(4 + i * 2);
   }
 
-  // Obj 2: Pages
   addObj(`<< /Type /Pages /Kids [${pageObjIds.map(id => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`);
-
-  // Obj 3: Font
   addObj(`<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>`);
 
-  // Pages + streams
   for (let p = 0; p < pages.length; p++) {
     const pageLines = pages[p];
     const contentObjId = 4 + p * 2 + 1;
 
-    // Page object
     addObj(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents ${contentObjId} 0 R /Resources << /Font << /F1 ${fontObjId} 0 R >> >> >>`);
 
-    // Content stream
     const textOps: string[] = [];
     textOps.push("BT");
     textOps.push(`/F1 10 Tf`);
-    let y = pageHeight - margin;
+    const y = pageHeight - margin;
     textOps.push(`${margin} ${y} Td`);
 
     for (const line of pageLines) {
@@ -130,7 +93,6 @@ function generatePdfBytes(title: string, content: string): Uint8Array {
     addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   }
 
-  // Build PDF
   let pdf = "%PDF-1.4\n";
   for (let i = 0; i < objects.length; i++) {
     offsets.push(pdf.length);
@@ -220,24 +182,49 @@ serve(async (req) => {
       );
     }
 
-    // Transcribe logs without transcripts
+    // Process logs: transcribe or skip based on guardrails
     const transcripts: string[] = [];
 
     for (const log of logs) {
+      // --- GUARDRAIL 1: Duration too short ---
+      if (log.duration_seconds < 3) {
+        const sentinel = "Recording too short for reliable transcription.";
+        console.log(`[GUARD] Log ${log.id}: duration ${log.duration_seconds}s < 3s — skipping transcription`);
+        await supabase.from("voice_logs").update({ transcript: sentinel, status: "skipped" }).eq("id", log.id);
+        continue; // sentinel — excluded from report
+      }
+
+      // If already transcribed, apply sanity check before including
       if (log.transcript) {
+        // Check if it's a sentinel
+        if (isSentinel(log.transcript)) {
+          console.log(`[GUARD] Log ${log.id}: existing sentinel transcript — excluding`);
+          continue;
+        }
+
+        // Sanity check: words-per-second ratio
+        const wordCount = log.transcript.split(/\s+/).filter((w: string) => w.length > 0).length;
+        const wps = wordCount / Math.max(log.duration_seconds, 1);
+        if (wps > 5) {
+          const sentinel = "Unreliable transcription — excluded from report.";
+          console.log(`[GUARD] Log ${log.id}: ${wordCount} words in ${log.duration_seconds}s (${wps.toFixed(1)} wps) — unreliable`);
+          await supabase.from("voice_logs").update({ transcript: sentinel, status: "unreliable" }).eq("id", log.id);
+          continue;
+        }
+
         transcripts.push(log.transcript);
+
         // Upload existing transcript to storage
         const logDate = new Date(log.recorded_at).toISOString().split("T")[0];
         const txtPath = `${logDate}/${userEmail}/${log.id}.txt`;
-        console.log("Uploading existing transcript to:", txtPath);
-        const { error: txtUploadErr } = await supabase.storage.from("transcripts").upload(txtPath, new TextEncoder().encode(log.transcript), {
+        await supabase.storage.from("transcripts").upload(txtPath, new TextEncoder().encode(log.transcript), {
           contentType: "text/plain",
           upsert: true,
         });
-        if (txtUploadErr) console.error("Transcript upload failed:", txtUploadErr);
         continue;
       }
 
+      // --- Need to transcribe ---
       await supabase.from("voice_logs").update({ status: "transcribing" }).eq("id", log.id);
 
       const { data: audioData, error: downloadError } = await supabase.storage
@@ -251,6 +238,15 @@ serve(async (req) => {
       }
 
       const arrayBuffer = await audioData.arrayBuffer();
+
+      // --- GUARDRAIL 2: Audio file too small ---
+      if (arrayBuffer.byteLength < 1024) {
+        const sentinel = "No usable audio detected.";
+        console.log(`[GUARD] Log ${log.id}: audio size ${arrayBuffer.byteLength} bytes < 1KB — skipping`);
+        await supabase.from("voice_logs").update({ transcript: sentinel, status: "skipped" }).eq("id", log.id);
+        continue;
+      }
+
       const bytes = new Uint8Array(arrayBuffer);
       let binary = "";
       const chunkSize = 8192;
@@ -272,13 +268,20 @@ serve(async (req) => {
             messages: [
               {
                 role: "system",
-                content: "You are a transcription engine for construction site voice logs. Transcribe the audio exactly as spoken. Output ONLY the transcription text, no commentary.",
+                content: `You are a verbatim transcription engine. Transcribe ONLY speech that is clearly audible.
+Rules:
+- If no speech is detected, respond EXACTLY: "Unclear or no speech detected."
+- If speech is partially unclear, transcribe only the clear parts.
+- Do NOT invent, infer, or fabricate any content.
+- Do NOT generate plausible filler text.
+- Do NOT add names, dates, locations, or details that are not clearly spoken.
+- Output ONLY what was clearly spoken — nothing more.`,
               },
               {
                 role: "user",
                 content: [
                   { type: "input_audio", input_audio: { data: base64Audio, format: "webm" } },
-                  { type: "text", text: "Transcribe this construction site voice log." },
+                  { type: "text", text: "Transcribe this audio. If no clear speech is present, respond exactly: \"Unclear or no speech detected.\"" },
                 ],
               },
             ],
@@ -308,30 +311,85 @@ serve(async (req) => {
       }
 
       const transcribeResult = await transcribeResponse.json();
-      const transcript = transcribeResult.choices?.[0]?.message?.content?.trim() || "";
+      let transcript = transcribeResult.choices?.[0]?.message?.content?.trim() || "";
+
+      // --- GUARDRAIL 3: Post-transcription sanity check ---
+      if (transcript && !isSentinel(transcript)) {
+        const wordCount = transcript.split(/\s+/).filter((w: string) => w.length > 0).length;
+        const wps = wordCount / Math.max(log.duration_seconds, 1);
+        if (wps > 5) {
+          console.log(`[GUARD] Log ${log.id}: transcription produced ${wordCount} words for ${log.duration_seconds}s (${wps.toFixed(1)} wps) — marking unreliable`);
+          transcript = "Unreliable transcription — excluded from report.";
+          await supabase.from("voice_logs").update({ transcript, status: "unreliable" }).eq("id", log.id);
+          continue;
+        }
+      }
 
       await supabase.from("voice_logs").update({ transcript, status: "transcribed" }).eq("id", log.id);
-      transcripts.push(transcript);
+
+      // Only include non-sentinel transcripts
+      if (!isSentinel(transcript)) {
+        transcripts.push(transcript);
+      }
 
       // Upload transcript to storage
       const logDate = new Date(log.recorded_at).toISOString().split("T")[0];
       const txtPath = `${logDate}/${userEmail}/${log.id}.txt`;
-      console.log("Uploading new transcript to:", txtPath);
-      const { error: txtUploadErr2 } = await supabase.storage.from("transcripts").upload(txtPath, new TextEncoder().encode(transcript), {
+      await supabase.storage.from("transcripts").upload(txtPath, new TextEncoder().encode(transcript), {
         contentType: "text/plain",
         upsert: true,
       });
-      if (txtUploadErr2) console.error("Transcript upload failed:", txtUploadErr2);
     }
 
+    // --- If no valid transcripts, return empty report ---
     if (transcripts.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "No transcripts could be generated" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      const emptyReport = "DAILY SITE REPORT\n\nNo activities reported. No usable field logs recorded.\n\n— End of Report —";
+
+      const reportDate = new Date().toISOString().split("T")[0];
+      const pdfBytes = generatePdfBytes(`SiteLog Daily Report — ${projectName}`, emptyReport);
+      const sanitizedName = projectName.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
+      const pdfPath = `${reportDate}/${sanitizedName}_Daily Report_${reportDate}.pdf`;
+
+      await supabase.storage.from("report-pdfs").upload(pdfPath, pdfBytes, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+
+      const pdfUrl = `${supabaseUrl}/storage/v1/object/public/report-pdfs/${pdfPath}`;
+
+      const { data: existingReport } = await supabase
+        .from("daily_reports")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("report_date", reportDate)
+        .maybeSingle();
+
+      let report;
+      if (existingReport) {
+        const { data, error } = await supabase
+          .from("daily_reports")
+          .update({ content: emptyReport, log_ids, pdf_url: pdfUrl })
+          .eq("id", existingReport.id)
+          .select()
+          .single();
+        if (error) throw error;
+        report = data;
+      } else {
+        const { data, error } = await supabase
+          .from("daily_reports")
+          .insert({ content: emptyReport, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl })
+          .select()
+          .single();
+        if (error) throw error;
+        report = data;
+      }
+
+      return new Response(JSON.stringify({ report: { ...report, pdf_url: pdfUrl } }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Generate report
+    // Generate report with trusted transcripts only
     const todayStr = new Date().toLocaleDateString("en-US", {
       weekday: "long", month: "long", day: "numeric", year: "numeric",
     });
@@ -351,38 +409,47 @@ serve(async (req) => {
               role: "system",
               content: `You are a construction daily report generator. You produce formal, structured daily site reports from voice log transcriptions.
 
+STRICT GROUNDING RULES:
+- ONLY include information explicitly stated in the transcripts.
+- NEVER infer, fabricate, or embellish names, dates, weather, activities, or events.
+- If a section has no relevant transcript data, write "Not reported."
+- Do NOT generate a plausible construction narrative — report ONLY what was said.
+- Do NOT add details that sound realistic but were not in the transcripts.
+- If a transcript is vague or incomplete, report it as-is — do not fill gaps.
+
 Output format:
 DAILY SITE REPORT — [DATE]
 PROJECT: [PROJECT NAME]
 
 WEATHER & CONDITIONS:
-(Infer from context or state "Not reported")
+(Only if explicitly mentioned in transcripts, otherwise "Not reported")
 
 WORK PERFORMED:
-- Bullet points of activities mentioned
+- Only activities explicitly described in transcripts
+- If none mentioned, write "Not reported"
 
 MATERIALS & EQUIPMENT:
-- Items mentioned or "None reported"
+- Only items explicitly mentioned or "Not reported"
 
 PERSONNEL:
-- Names/trades mentioned or "Not specified"
+- Only names/trades explicitly mentioned or "Not reported"
 
 SAFETY OBSERVATIONS:
-- Any safety items mentioned or "None reported"
+- Only safety items explicitly mentioned or "Not reported"
 
 ISSUES / DELAYS:
-- Problems mentioned or "None reported"
+- Only problems explicitly mentioned or "Not reported"
 
 NOTES:
-- Any additional context
+- Any additional context directly from transcripts
 
 — End of Report —
 
-Be factual. No embellishment. If information isn't in the transcripts, say "Not reported." This is documentation-grade output.`,
+Be factual. No embellishment. This is documentation-grade output.`,
             },
             {
               role: "user",
-              content: `Generate a daily site report for ${todayStr}.\nPROJECT: ${projectName}\n\nVoice log transcriptions (${transcripts.length}):\n\n${transcripts
+              content: `Generate a daily site report for ${todayStr}.\nPROJECT: ${projectName}\n\nVoice log transcriptions (${transcripts.length} verified logs):\n\n${transcripts
                 .map((t, i) => `--- Log ${i + 1} ---\n${t}`)
                 .join("\n\n")}`,
             },
@@ -409,7 +476,6 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
     const sanitizedName = projectName.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
     const pdfPath = `${reportDate}/${sanitizedName}_Daily Report_${reportDate}.pdf`;
 
-    // Upload PDF (upsert via overwrite)
     const { error: pdfUploadError } = await supabase.storage
       .from("report-pdfs")
       .upload(pdfPath, pdfBytes, {
@@ -435,7 +501,7 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
     if (existingReport) {
       const { data, error } = await supabase
         .from("daily_reports")
-        .update({ content: reportContent, log_ids: log_ids, pdf_url: pdfUrl })
+        .update({ content: reportContent, log_ids, pdf_url: pdfUrl })
         .eq("id", existingReport.id)
         .select()
         .single();
@@ -444,13 +510,7 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
     } else {
       const { data, error } = await supabase
         .from("daily_reports")
-        .insert({
-          content: reportContent,
-          log_ids: log_ids,
-          report_date: reportDate,
-          user_id: user_id,
-          pdf_url: pdfUrl,
-        })
+        .insert({ content: reportContent, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl })
         .select()
         .single();
       if (error) throw error;
@@ -471,14 +531,10 @@ Be factual. No embellishment. If information isn't in the transcripts, say "Not 
         user_email: userEmail,
         project_name: projectName,
       };
-      // Don't overwrite status if already 'sent'
       if (existingAdmin.status !== "sent") {
         updateData.status = "pending_sent";
       }
-      await supabase
-        .from("admin_reports")
-        .update(updateData)
-        .eq("id", existingAdmin.id);
+      await supabase.from("admin_reports").update(updateData).eq("id", existingAdmin.id);
     } else {
       await supabase.from("admin_reports").insert({
         user_id,

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { type LogEntryData, type LogStatus } from "@/components/LogEntry";
 
-export function useVoiceRecorder(userId: string | null) {
+export function useVoiceRecorder(userId: string | null, userEmail?: string | null) {
   const [isRecording, setIsRecording] = useState(false);
   const [entries, setEntries] = useState<LogEntryData[]>([]);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);

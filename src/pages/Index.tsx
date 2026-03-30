@@ -109,9 +109,14 @@ const Index = () => {
           <h1 className="text-lg font-bold text-foreground tracking-tight">
             SiteLog
           </h1>
-          <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-muted-foreground">
-            Sign Out
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setShowDebug((v) => !v)} className="text-xs text-muted-foreground">
+              {showDebug ? "Hide Debug" : "Debug"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-muted-foreground">
+              Sign Out
+            </Button>
+          </div>
         </div>
         <ProjectField value={user.project_name} onSave={updateProjectName} />
         <p className="text-xs text-muted-foreground">{today()}</p>

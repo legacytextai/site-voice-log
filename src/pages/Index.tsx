@@ -138,6 +138,21 @@ const Index = () => {
           onGenerate={handleGenerateReport}
         />
       </div>
+      {showDebug && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/90 text-green-400 p-3 max-h-[40vh]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider">Debug Log ({debugLogs.length})</span>
+            <Button variant="ghost" size="sm" onClick={() => setShowDebug(false)} className="text-green-400 text-xs h-6 px-2">Close</Button>
+          </div>
+          <ScrollArea className="h-[calc(40vh-3rem)]">
+            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all space-y-0.5">
+              {debugLogs.length === 0 ? "No logs yet. Tap record to start." : debugLogs.map((log, i) => (
+                <div key={i} className={log.includes("[ERR]") ? "text-red-400" : ""}>{log}</div>
+              ))}
+            </pre>
+          </ScrollArea>
+        </div>
+      )}
     </div>
   );
 };

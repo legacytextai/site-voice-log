@@ -114,7 +114,9 @@ export function useVoiceRecorder(userId: string | null, userEmail?: string | nul
           (Date.now() - startTimeRef.current) / 1000
         );
         const { ext, contentType } = getMimeInfo(selectedMimeRef.current);
+        addDebug(`[UPLOAD] chunks: ${chunksRef.current.length}, sizes: ${chunksRef.current.map(c => c.size).join(",")}`);
         const blob = new Blob(chunksRef.current, { type: selectedMimeRef.current || "audio/webm" });
+        addDebug(`[UPLOAD] blob size: ${blob.size} bytes`);
         const tempId = crypto.randomUUID();
         const dateFolder = new Date().toISOString().split("T")[0];
         const userFolder = userEmail || userId || "unknown";
@@ -170,7 +172,7 @@ export function useVoiceRecorder(userId: string | null, userEmail?: string | nul
       };
 
       addDebug("[8] Calling recorder.start()");
-      mediaRecorder.start();
+      mediaRecorder.start(1000);
       addDebug(`[9] Recorder started, state: ${mediaRecorder.state}`);
       setIsRecording(true);
     } catch (err: unknown) {

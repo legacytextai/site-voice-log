@@ -226,6 +226,13 @@ serve(async (req) => {
     for (const log of logs) {
       if (log.transcript) {
         transcripts.push(log.transcript);
+        // Upload existing transcript to storage
+        const logDate = new Date(log.recorded_at).toISOString().split("T")[0];
+        const txtPath = `${logDate}/${userEmail}/${log.id}.txt`;
+        await supabase.storage.from("transcripts").upload(txtPath, new TextEncoder().encode(log.transcript), {
+          contentType: "text/plain",
+          upsert: true,
+        });
         continue;
       }
 
@@ -303,6 +310,14 @@ serve(async (req) => {
 
       await supabase.from("voice_logs").update({ transcript, status: "transcribed" }).eq("id", log.id);
       transcripts.push(transcript);
+
+      // Upload transcript to storage
+      const logDate = new Date(log.recorded_at).toISOString().split("T")[0];
+      const txtPath = `${logDate}/${userEmail}/${log.id}.txt`;
+      await supabase.storage.from("transcripts").upload(txtPath, new TextEncoder().encode(transcript), {
+        contentType: "text/plain",
+        upsert: true,
+      });
     }
 
     if (transcripts.length === 0) {

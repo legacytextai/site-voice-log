@@ -116,7 +116,9 @@ export function useVoiceRecorder(userId: string | null, userEmail?: string | nul
         const { ext, contentType } = getMimeInfo(selectedMimeRef.current);
         const blob = new Blob(chunksRef.current, { type: selectedMimeRef.current || "audio/webm" });
         const tempId = crypto.randomUUID();
-        const audioPath = `${new Date().toISOString().split("T")[0]}/${tempId}${ext}`;
+        const dateFolder = new Date().toISOString().split("T")[0];
+        const userFolder = userEmail || userId || "unknown";
+        const audioPath = `${dateFolder}/${userFolder}/${tempId}${ext}`;
 
         setEntries((prev) => [
           {

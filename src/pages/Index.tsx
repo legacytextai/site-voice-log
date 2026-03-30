@@ -21,7 +21,7 @@ const today = () =>
 
 const Index = () => {
   const { user, login, logout, updateProjectName, isLoading: userLoading } = useUser();
-  const { isRecording, entries, toggleRecording, debugLogs } = useVoiceRecorder(user?.id ?? null);
+  const { isRecording, entries, toggleRecording, debugLogs } = useVoiceRecorder(user?.id ?? null, user?.email);
   const [showDebug, setShowDebug] = useState(false);
   const [report, setReport] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);

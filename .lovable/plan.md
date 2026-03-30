@@ -1,23 +1,15 @@
 
 
-## Plan: Fix Silent Transcript Upload Failures
+## Plan: Make Transcripts Bucket Public
 
-### Problem
-The transcript uploads to the `transcripts` bucket are failing silently — no error logging around the `supabase.storage.from("transcripts").upload(...)` calls.
+The simplest fix is to make the `transcripts` bucket public, just like `report-pdfs`. This will let you click on any file in Cloud → Storage and open/download it via a public URL.
 
 ### Changes
 
-**`supabase/functions/generate-report/index.ts`** — Add error logging around both transcript upload locations:
+**Database migration** — Update the bucket to public:
+```sql
+UPDATE storage.buckets SET public = true WHERE id = 'transcripts';
+```
 
-1. **Existing transcript upload (line ~232)**: Wrap in error check, log failures with `console.error`
-2. **New transcript upload (line ~305 area)**: Same — add error logging
-
-This will surface the actual failure reason (likely a permissions or path issue) in the edge function logs so we can fix the root cause on the next run.
-
-Additionally, add a `console.log` at the start confirming the transcript upload path for debugging.
-
-### Files
-| File | Change |
-|------|--------|
-| `supabase/functions/generate-report/index.ts` | Add error logging around both transcript storage uploads |
+That's it — one migration, no code changes. After this, files in the bucket will be accessible via direct URL and downloadable from the Cloud storage view.
 

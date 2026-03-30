@@ -9,6 +9,13 @@ export function useVoiceRecorder(userId: string | null) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const startTimeRef = useRef<number>(0);
   const chunksRef = useRef<Blob[]>([]);
+  const selectedMimeRef = useRef<string>("");
+
+  const getMimeInfo = (mime: string) => {
+    if (mime.includes("mp4")) return { ext: ".mp4", contentType: "audio/mp4" };
+    if (mime.includes("webm")) return { ext: ".webm", contentType: "audio/webm" };
+    return { ext: ".webm", contentType: "audio/webm" };
+  };
 
   const addDebug = useCallback((msg: string) => {
     const ts = new Date().toISOString().slice(11, 23);

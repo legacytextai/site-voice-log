@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Trash2 } from "lucide-react";
 
 export type LogStatus = "saving" | "saved";
 
@@ -11,6 +12,7 @@ export interface LogEntryData {
 
 interface LogEntryProps {
   entry: LogEntryData;
+  onDelete?: (id: string) => void;
 }
 
 const formatTime = (date: Date) =>
@@ -22,7 +24,13 @@ const formatDuration = (seconds: number) => {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 };
 
-const LogEntry = ({ entry }: LogEntryProps) => {
+const LogEntry = ({ entry, onDelete }: LogEntryProps) => {
+  const handleDelete = () => {
+    if (window.confirm("Delete this recording? This cannot be undone.")) {
+      onDelete?.(entry.id);
+    }
+  };
+
   return (
     <div className="flex items-center justify-between py-3 border-b border-border last:border-b-0">
       <div className="flex items-center gap-3">
@@ -33,15 +41,26 @@ const LogEntry = ({ entry }: LogEntryProps) => {
           {formatDuration(entry.durationSeconds)}
         </span>
       </div>
-      <span
-        className={cn(
-          "text-xs font-medium uppercase tracking-wider",
-          entry.status === "saving" && "text-status-saving",
-          entry.status === "saved" && "text-status-saved"
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "text-xs font-medium uppercase tracking-wider",
+            entry.status === "saving" && "text-status-saving",
+            entry.status === "saved" && "text-status-saved"
+          )}
+        >
+          {entry.status === "saving" ? "Saving…" : "Saved"}
+        </span>
+        {entry.status === "saved" && onDelete && (
+          <button
+            onClick={handleDelete}
+            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+            aria-label="Delete recording"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         )}
-      >
-        {entry.status === "saving" ? "Saving…" : "Saved"}
-      </span>
+      </div>
     </div>
   );
 };

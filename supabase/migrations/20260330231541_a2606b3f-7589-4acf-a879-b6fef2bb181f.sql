@@ -1,0 +1,1 @@
+CREATE POLICY "Anyone can delete voice logs" ON public.voice_logs FOR DELETE TO public USING (true);

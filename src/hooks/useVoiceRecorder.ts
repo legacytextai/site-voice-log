@@ -113,9 +113,10 @@ export function useVoiceRecorder(userId: string | null) {
         const duration = Math.round(
           (Date.now() - startTimeRef.current) / 1000
         );
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const { ext, contentType } = getMimeInfo(selectedMimeRef.current);
+        const blob = new Blob(chunksRef.current, { type: selectedMimeRef.current || "audio/webm" });
         const tempId = crypto.randomUUID();
-        const audioPath = `${new Date().toISOString().split("T")[0]}/${tempId}.webm`;
+        const audioPath = `${new Date().toISOString().split("T")[0]}/${tempId}${ext}`;
 
         setEntries((prev) => [
           {

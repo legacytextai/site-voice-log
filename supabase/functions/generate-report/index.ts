@@ -368,7 +368,7 @@ Rules:
       if (existingReport) {
         const { data, error } = await supabase
           .from("daily_reports")
-          .update({ content: emptyReport, log_ids, pdf_url: pdfUrl })
+          .update({ content: emptyReport, log_ids, pdf_url: pdfUrl, user_email: userEmail })
           .eq("id", existingReport.id)
           .select()
           .single();
@@ -377,7 +377,7 @@ Rules:
       } else {
         const { data, error } = await supabase
           .from("daily_reports")
-          .insert({ content: emptyReport, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl })
+          .insert({ content: emptyReport, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl, user_email: userEmail })
           .select()
           .single();
         if (error) throw error;
@@ -501,7 +501,7 @@ Be factual. No embellishment. This is documentation-grade output.`,
     if (existingReport) {
       const { data, error } = await supabase
         .from("daily_reports")
-        .update({ content: reportContent, log_ids, pdf_url: pdfUrl })
+        .update({ content: reportContent, log_ids, pdf_url: pdfUrl, user_email: userEmail })
         .eq("id", existingReport.id)
         .select()
         .single();
@@ -510,7 +510,7 @@ Be factual. No embellishment. This is documentation-grade output.`,
     } else {
       const { data, error } = await supabase
         .from("daily_reports")
-        .insert({ content: reportContent, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl })
+        .insert({ content: reportContent, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl, user_email: userEmail })
         .select()
         .single();
       if (error) throw error;

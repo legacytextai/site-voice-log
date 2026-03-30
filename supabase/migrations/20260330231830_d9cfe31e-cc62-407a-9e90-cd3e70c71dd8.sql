@@ -1,0 +1,1 @@
+ALTER TABLE public.daily_reports ADD COLUMN user_email text;

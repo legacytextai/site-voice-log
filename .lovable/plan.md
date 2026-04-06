@@ -1,54 +1,73 @@
 
 
-## Plan: Backend Date-Scoped Daily Workspace Support
+## Plan: Supabase Auth Security Layer for SiteLog
 
-### 1. Migration — `daily_reports` schema
+### 1. Database Migration (single SQL migration)
 
-```sql
-ALTER TABLE daily_reports ADD COLUMN project_name text;
+**Schema changes:**
+- Add `auth_id uuid UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE` to `users` table (nullable for safe migration)
+- Create `get_user_id_for_auth(auth_uid uuid)` security definer function
+- Drop all existing permissive `true` RLS policies on `users`, `voice_logs`, `daily_reports`, `admin_reports`
+- Create ownership-enforcing RLS policies using `get_user_id_for_auth(auth.uid())`
+- Add index on `users(auth_id)` for lookup performance
 
-CREATE UNIQUE INDEX uq_daily_reports_user_date_project
-  ON daily_reports(user_id, report_date, project_name);
+**RLS policy design:**
 
-CREATE INDEX idx_admin_reports_user_date_project
-  ON admin_reports(user_id, report_date, project_name);
-```
+| Table | SELECT | INSERT | UPDATE | DELETE |
+|-------|--------|--------|--------|--------|
+| `users` | `id = get_user_id_for_auth(auth.uid())` | service role only (edge functions create users) | `id = get_user_id_for_auth(auth.uid())` | N/A |
+| `voice_logs` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` |
+| `daily_reports` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | N/A |
+| `admin_reports` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | N/A |
 
-**Risk for existing rows**: Existing rows have `NULL` for `project_name`. The unique index allows multiple NULLs (Postgres treats NULLs as distinct in unique indexes), so no migration failure. However, the edge functions will need to handle NULL-safe matching going forward.
+**Note on edge functions**: Edge functions use `SUPABASE_SERVICE_ROLE_KEY` which bypasses RLS. They will continue to work. The RLS policies protect against direct client-side access from unauthenticated or wrong users.
 
-### 2. Update `generate-report` edge function
+### 2. Edge Function: `generate-report`
 
-**Input change** (line 147):
-- Accept optional `report_date` from request body
-- If supplied, use it for `reportDate` and AI prompt date string
-- If not supplied, default to `new Date()` (backward compatible)
+**Changes (lines 141-175 area):**
+- Extract `Authorization` header from request
+- Validate JWT using `supabase.auth.getUser()` with anon key client
+- Look up `users.id` from `auth_id = auth_user.id`
+- Use that resolved `user_id` instead of the client-supplied one
+- Reject if no matching user found
+- Remove `user_id` from required input validation (it's now derived from JWT)
 
-**Row lookup changes** — add `.eq("project_name", projectName)` to all lookups:
-- `daily_reports` lookup (lines 383-388 and 516-521)
-- `admin_reports` lookup (lines 544-549)
+**Rest of function unchanged** — all downstream logic uses the resolved `user_id`.
 
-**Insert changes**:
-- Include `project_name` in `daily_reports` insert (lines 401-406 and 534-537)
+### 3. Edge Function: `regenerate-report-pdf`
 
-**AI prompt date** (lines 416-418):
-- Use `report_date` input (if provided) to format the date string instead of `new Date()`
+**Same pattern:**
+- Extract and validate JWT from Authorization header
+- Resolve `user_id` from `auth_id`
+- Use resolved `user_id` for all lookups
+- Remove `user_id` from required input fields
 
-### 3. Update `regenerate-report-pdf` edge function
+### 4. NULL user_id inspection
 
-**Row lookup changes** — add `.eq("project_name", project_name)` to:
-- `daily_reports` lookup (lines 170-175)
-- `admin_reports` lookup (lines 190-195)
+Will query existing rows to report counts of NULL `user_id` in `voice_logs` and `daily_reports`. No schema change yet — just reporting.
+
+### 5. Frontend auth hook
+
+**Replace `useUser` hook:**
+- Use `supabase.auth.signInWithOtp({ email })` for magic link login
+- On auth state change (`onAuthStateChange`), look up or create `users` row by email and bind `auth_id`
+- Session managed by Supabase Auth (no more localStorage `sitelog_user_id`)
+- Keep `project_name` on `users` table as before
+
+**Update `Index.tsx`:**
+- Login flow calls OTP instead of direct insert
+- All `supabase.functions.invoke()` calls automatically include the JWT via the authenticated client
 
 ### Technical Details
 
-**Exact row matching after changes**:
-- `daily_reports`: `user_id + report_date + project_name`
-- `admin_reports`: `user_id + report_date + project_name`
+**Files changed:**
+1. New migration SQL (schema + function + RLS policies)
+2. `supabase/functions/generate-report/index.ts` — JWT validation + user_id resolution
+3. `supabase/functions/regenerate-report-pdf/index.ts` — same pattern
+4. `src/hooks/useUser.ts` — Supabase Auth OTP flow
+5. `src/pages/Index.tsx` — minor login flow adjustment
 
-**Files changed**:
-1. New migration SQL file
-2. `supabase/functions/generate-report/index.ts`
-3. `supabase/functions/regenerate-report-pdf/index.ts`
+**Migration risk:** Zero for existing data. `auth_id` is nullable; existing rows unaffected. Old `true` RLS policies are replaced, but edge functions use service role key (bypasses RLS). Frontend will require authentication after this change — unauthenticated access will be blocked by RLS.
 
-**No changes to**: frontend, PDF formatting, transcription logic, AI prompt structure (beyond date), storage paths, RLS policies.
+**Auth configuration:** Will use `cloud--configure_auth` to ensure email OTP is enabled. Will NOT enable auto-confirm (users must verify email).
 

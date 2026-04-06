@@ -101,18 +101,21 @@ export type Database = {
       }
       users: {
         Row: {
+          auth_id: string | null
           created_at: string | null
           email: string
           id: string
           project_name: string | null
         }
         Insert: {
+          auth_id?: string | null
           created_at?: string | null
           email: string
           id?: string
           project_name?: string | null
         }
         Update: {
+          auth_id?: string | null
           created_at?: string | null
           email?: string
           id?: string
@@ -169,7 +172,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_id_for_auth: { Args: { auth_uid: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never

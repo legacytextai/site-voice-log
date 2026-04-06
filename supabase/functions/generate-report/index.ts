@@ -497,7 +497,7 @@ Be factual. No embellishment. This is documentation-grade output.`,
     const reportContent = reportResult.choices?.[0]?.message?.content?.trim() || "";
 
     // Generate PDF
-    const reportDate = new Date().toISOString().split("T")[0];
+    // reportDate already defined above
     const pdfBytes = generatePdfBytes(`SiteLog Daily Report — ${projectName} — ${todayStr}`, reportContent);
     const sanitizedName = projectName.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
     const pdfPath = `${reportDate}/${sanitizedName}_Daily Report_${reportDate}.pdf`;

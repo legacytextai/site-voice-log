@@ -166,39 +166,49 @@ serve(async (req) => {
 
     const pdfUrl = `${supabaseUrl}/storage/v1/object/public/report-pdfs/${pdfPath}`;
 
-    // Update daily_reports if exists
-    const { data: existingReport } = await supabase
+    // Update daily_reports — if multiple rows match, update most recent only
+    const { data: dailyRows } = await supabase
       .from("daily_reports")
-      .select("id")
+      .select("id, created_at")
       .eq("user_id", user_id)
       .eq("report_date", report_date)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
 
-    if (existingReport) {
+    let updatedDailyReport = false;
+    if (dailyRows && dailyRows.length > 1) {
+      console.warn(`[WARN] Found ${dailyRows.length} daily_reports rows for user_id=${user_id} report_date=${report_date} — updating most recent only (id=${dailyRows[0].id})`);
+    }
+    if (dailyRows && dailyRows.length > 0) {
       await supabase
         .from("daily_reports")
         .update({ content, pdf_url: pdfUrl })
-        .eq("id", existingReport.id);
+        .eq("id", dailyRows[0].id);
+      updatedDailyReport = true;
     }
 
-    // Update admin_reports if exists
-    const { data: existingAdmin } = await supabase
+    // Update admin_reports — same conservative approach
+    const { data: adminRows } = await supabase
       .from("admin_reports")
-      .select("id, status")
+      .select("id, status, created_at")
       .eq("user_id", user_id)
       .eq("report_date", report_date)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
 
-    if (existingAdmin) {
+    let updatedAdminReport = false;
+    if (adminRows && adminRows.length > 1) {
+      console.warn(`[WARN] Found ${adminRows.length} admin_reports rows for user_id=${user_id} report_date=${report_date} — updating most recent only (id=${adminRows[0].id})`);
+    }
+    if (adminRows && adminRows.length > 0) {
       const updateData: Record<string, string> = { pdf_url: pdfUrl };
-      if (existingAdmin.status !== "sent") {
+      if (adminRows[0].status !== "sent") {
         updateData.status = "pending_sent";
       }
-      await supabase.from("admin_reports").update(updateData).eq("id", existingAdmin.id);
+      await supabase.from("admin_reports").update(updateData).eq("id", adminRows[0].id);
+      updatedAdminReport = true;
     }
 
     return new Response(
-      JSON.stringify({ pdf_url: pdfUrl, updated_daily_report: !!existingReport, updated_admin_report: !!existingAdmin }),
+      JSON.stringify({ pdf_url: pdfUrl, updated_daily_report: updatedDailyReport, updated_admin_report: updatedAdminReport }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {

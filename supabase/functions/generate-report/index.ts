@@ -144,7 +144,7 @@ serve(async (req) => {
   }
 
   try {
-    const { log_ids, user_id, project_name } = await req.json();
+    const { log_ids, user_id, project_name, report_date: inputReportDate } = await req.json();
     const projectName = (project_name || "").trim() || "Untitled Project";
 
     if (!log_ids || !Array.isArray(log_ids) || log_ids.length === 0) {

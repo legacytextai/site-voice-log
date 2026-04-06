@@ -119,7 +119,7 @@ const EmailEntry = ({ onSignUp, onSignIn, onResetPassword }: EmailEntryProps) =>
           )}
 
           {error && <p className="text-xs text-destructive">{error}</p>}
-          {info && <p className="text-xs text-green-600">{info}</p>}
+          {info && <p className="text-xs text-muted-foreground font-medium">{info}</p>}
 
           <button
             type="submit"

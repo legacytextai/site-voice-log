@@ -1,47 +1,54 @@
 
 
-## Plan: New `regenerate-report-pdf` Edge Function
+## Plan: Backend Date-Scoped Daily Workspace Support
 
-### Recommended Function Name
-`regenerate-report-pdf`
+### 1. Migration — `daily_reports` schema
 
-### Input Contract
-```json
-{
-  "user_id": "uuid (required)",
-  "project_name": "string (required)",
-  "report_date": "YYYY-MM-DD (required)",
-  "content": "string — full final edited report text (required)"
-}
+```sql
+ALTER TABLE daily_reports ADD COLUMN project_name text;
+
+CREATE UNIQUE INDEX uq_daily_reports_user_date_project
+  ON daily_reports(user_id, report_date, project_name);
+
+CREATE INDEX idx_admin_reports_user_date_project
+  ON admin_reports(user_id, report_date, project_name);
 ```
-No `daily_report_id` needed — the existing `generate-report` function already identifies rows by `user_id + report_date`, which is reliable and consistent.
 
-### Reused Logic vs New Logic
-- **Reused**: The `generatePdfBytes(title, content)` function will be **copied verbatim** from `generate-report/index.ts` into the new function. This avoids any coupling or risk to the existing function. The function is self-contained (~100 lines) and includes the Helvetica footer, footer reserve, and all current formatting.
-- **New**: Input validation, the persistence update logic, and the CORS/serve wrapper.
+**Risk for existing rows**: Existing rows have `NULL` for `project_name`. The unique index allows multiple NULLs (Postgres treats NULLs as distinct in unique indexes), so no migration failure. However, the edge functions will need to handle NULL-safe matching going forward.
 
-Shared-module extraction is possible but introduces deployment coupling risk — copying is safer for a surgical addition.
+### 2. Update `generate-report` edge function
 
-### Persistence Update Plan
-1. **`daily_reports`**: Find row by `user_id + report_date`. If found, update `content` and `pdf_url`. If not found, do nothing (don't insert — this function is for *re*generation of existing reports).
-2. **`admin_reports`**: Find row by `user_id + report_date`. If found, update `pdf_url` only. If status is not `"sent"`, set to `"pending_sent"`.
+**Input change** (line 147):
+- Accept optional `report_date` from request body
+- If supplied, use it for `reportDate` and AI prompt date string
+- If not supplied, default to `new Date()` (backward compatible)
 
-This mirrors the existing upsert logic in `generate-report` but is update-only.
+**Row lookup changes** — add `.eq("project_name", projectName)` to all lookups:
+- `daily_reports` lookup (lines 383-388 and 516-521)
+- `admin_reports` lookup (lines 544-549)
 
-### PDF Upload Path
-Reuses the existing convention:
-```
-{report_date}/{SanitizedProjectName}_Daily Report_{report_date}.pdf
-```
-With `upsert: true`, so it overwrites the previous PDF for that date/project.
+**Insert changes**:
+- Include `project_name` in `daily_reports` insert (lines 401-406 and 534-537)
 
-### Files To Create/Change
-1. **`supabase/functions/regenerate-report-pdf/index.ts`** — new file (only file)
+**AI prompt date** (lines 416-418):
+- Use `report_date` input (if provided) to format the date string instead of `new Date()`
 
-No other files changed. No schema changes. No frontend changes.
+### 3. Update `regenerate-report-pdf` edge function
 
-### Risks / Edge Cases
-- **No matching `daily_reports` row**: If the app calls this before a report was ever generated, there's nothing to update. The function will still generate and upload the PDF and return the URL, but won't persist to `daily_reports`. This is acceptable — the caller can handle it.
-- **PDF overwrite**: Uses `upsert: true` on the same storage path, so the old PDF is replaced. This is intended behavior.
-- **`generatePdfBytes` duplication**: Two copies exist. If the PDF generator changes in the future, both must be updated. Acceptable tradeoff for zero-risk isolation.
+**Row lookup changes** — add `.eq("project_name", project_name)` to:
+- `daily_reports` lookup (lines 170-175)
+- `admin_reports` lookup (lines 190-195)
+
+### Technical Details
+
+**Exact row matching after changes**:
+- `daily_reports`: `user_id + report_date + project_name`
+- `admin_reports`: `user_id + report_date + project_name`
+
+**Files changed**:
+1. New migration SQL file
+2. `supabase/functions/generate-report/index.ts`
+3. `supabase/functions/regenerate-report-pdf/index.ts`
+
+**No changes to**: frontend, PDF formatting, transcription logic, AI prompt structure (beyond date), storage paths, RLS policies.
 

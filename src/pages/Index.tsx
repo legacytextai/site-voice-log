@@ -29,8 +29,13 @@ const Index = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const justLoggedInRef = useRef(false);
 
-  const handleLogin = async (email: string) => {
-    await login(email);
+  const handleSignUp = async (email: string, password: string) => {
+    await signUp(email, password);
+    justLoggedInRef.current = true;
+  };
+
+  const handleSignIn = async (email: string, password: string) => {
+    await signIn(email, password);
     justLoggedInRef.current = true;
   };
 

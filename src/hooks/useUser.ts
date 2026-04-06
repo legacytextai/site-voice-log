@@ -94,7 +94,7 @@ export function useUser() {
 
   const resetPassword = useCallback(async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `https://site-voice-log.lovable.app/reset-password`,
     });
     if (error) throw error;
   }, []);

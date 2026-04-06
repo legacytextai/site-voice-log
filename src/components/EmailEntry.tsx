@@ -1,112 +1,78 @@
 import { useState } from "react";
 
 interface EmailEntryProps {
-  onLogin: (email: string) => Promise<void>;
-  onVerifyOtp?: (email: string, token: string) => Promise<void>;
-  otpSent?: boolean;
+  onSignUp: (email: string, password: string) => Promise<void>;
+  onSignIn: (email: string, password: string) => Promise<void>;
+  onResetPassword: (email: string) => Promise<void>;
 }
 
-const EmailEntry = ({ onLogin, onVerifyOtp, otpSent }: EmailEntryProps) => {
+type Mode = "signin" | "signup" | "forgot";
+
+const EmailEntry = ({ onSignUp, onSignIn, onResetPassword }: EmailEntryProps) => {
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mode, setMode] = useState<Mode>("signin");
 
   const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
-  const handleSubmitEmail = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setInfo("");
 
     if (!isValidEmail(email)) {
       setError("Please enter a valid email address");
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await onLogin(email.trim().toLowerCase());
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setIsSubmitting(false);
+    if (mode === "forgot") {
+      setIsSubmitting(true);
+      try {
+        await onResetPassword(email.trim().toLowerCase());
+        setInfo("Password reset link sent. Check your email.");
+      } catch {
+        setError("Something went wrong. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
     }
-  };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
 
-    if (!otp || otp.length < 6) {
-      setError("Please enter the 6-digit code from your email");
+    if (mode === "signup" && password !== confirmPassword) {
+      setError("Passwords do not match");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await onVerifyOtp?.(email.trim().toLowerCase(), otp.trim());
-    } catch {
-      setError("Invalid or expired code. Please try again.");
+      if (mode === "signup") {
+        await onSignUp(email.trim().toLowerCase(), password);
+      } else {
+        await onSignIn(email.trim().toLowerCase(), password);
+      }
+    } catch (err: any) {
+      setError(err?.message || "Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (otpSent) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
-        <div className="w-full max-w-sm space-y-8">
-          <div>
-            <h1 className="text-lg font-bold text-foreground tracking-tight">
-              SiteLog
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Check your email for a verification code
-            </p>
-          </div>
-
-          <form onSubmit={handleVerifyOtp} className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              We sent a code to <strong className="text-foreground">{email}</strong>
-            </p>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="Enter 6-digit code"
-              autoFocus
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring text-center tracking-[0.3em] font-mono text-lg"
-            />
-
-            {error && (
-              <p className="text-xs text-destructive">{error}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSubmitting || otp.length < 6}
-              className="w-full py-3.5 bg-foreground text-background text-sm font-medium tracking-wide uppercase rounded-lg transition-opacity duration-150 disabled:opacity-30 disabled:cursor-not-allowed active:opacity-80"
-            >
-              {isSubmitting ? "Verifying…" : "Verify"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setOtp("");
-                setError("");
-                onLogin(email.trim().toLowerCase());
-              }}
-              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Resend code
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
+  const switchMode = (newMode: Mode) => {
+    setMode(newMode);
+    setError("");
+    setInfo("");
+    setPassword("");
+    setConfirmPassword("");
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
@@ -116,11 +82,13 @@ const EmailEntry = ({ onLogin, onVerifyOtp, otpSent }: EmailEntryProps) => {
             SiteLog
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Enter your email to get started
+            {mode === "signin" && "Sign in to your account"}
+            {mode === "signup" && "Create a new account"}
+            {mode === "forgot" && "Reset your password"}
           </p>
         </div>
 
-        <form onSubmit={handleSubmitEmail} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="email"
             value={email}
@@ -130,18 +98,82 @@ const EmailEntry = ({ onLogin, onVerifyOtp, otpSent }: EmailEntryProps) => {
             className="w-full px-4 py-3 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
 
-          {error && (
-            <p className="text-xs text-destructive">{error}</p>
+          {mode !== "forgot" && (
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           )}
+
+          {mode === "signup" && (
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm password"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          {info && <p className="text-xs text-green-600">{info}</p>}
 
           <button
             type="submit"
             disabled={isSubmitting || !email}
             className="w-full py-3.5 bg-foreground text-background text-sm font-medium tracking-wide uppercase rounded-lg transition-opacity duration-150 disabled:opacity-30 disabled:cursor-not-allowed active:opacity-80"
           >
-            {isSubmitting ? "Sending code…" : "Continue"}
+            {isSubmitting
+              ? "Please wait…"
+              : mode === "signin"
+              ? "Sign In"
+              : mode === "signup"
+              ? "Create Account"
+              : "Send Reset Link"}
           </button>
         </form>
+
+        <div className="flex flex-col items-center gap-2 text-xs">
+          {mode === "signin" && (
+            <>
+              <button
+                type="button"
+                onClick={() => switchMode("forgot")}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Forgot password?
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode("signup")}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Don't have an account? <span className="text-foreground font-medium">Sign up</span>
+              </button>
+            </>
+          )}
+          {mode === "signup" && (
+            <button
+              type="button"
+              onClick={() => switchMode("signin")}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Already have an account? <span className="text-foreground font-medium">Sign in</span>
+            </button>
+          )}
+          {mode === "forgot" && (
+            <button
+              type="button"
+              onClick={() => switchMode("signin")}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Back to sign in
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ const today = () =>
   });
 
 const Index = () => {
-  const { user, login, verifyOtp, logout, updateProjectName, isLoading: userLoading, otpSent } = useUser();
+  const { user, signUp, signIn, resetPassword, logout, updateProjectName, isLoading: userLoading } = useUser();
   const { isRecording, entries, toggleRecording, deleteEntry, debugLogs } = useVoiceRecorder(user?.id ?? null, user?.email);
   const [showDebug, setShowDebug] = useState(false);
   const [report, setReport] = useState<string | null>(null);

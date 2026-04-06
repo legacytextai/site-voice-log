@@ -1,0 +1,1 @@
+ALTER TABLE voice_logs ADD COLUMN project_name text;

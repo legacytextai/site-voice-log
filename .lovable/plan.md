@@ -1,73 +1,100 @@
 
 
-## Plan: Supabase Auth Security Layer for SiteLog
+## Diagnosis: Email + Password Auth for SiteLog
 
-### 1. Database Migration (single SQL migration)
+### Email/Password Auth Support Status
 
-**Schema changes:**
-- Add `auth_id uuid UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE` to `users` table (nullable for safe migration)
-- Create `get_user_id_for_auth(auth_uid uuid)` security definer function
-- Drop all existing permissive `true` RLS policies on `users`, `voice_logs`, `daily_reports`, `admin_reports`
-- Create ownership-enforcing RLS policies using `get_user_id_for_auth(auth.uid())`
-- Add index on `users(auth_id)` for lookup performance
+Email/password auth is natively supported by Lovable Cloud. It requires **no custom email domain, no custom templates, and no OTP configuration**. The only config needed is enabling email/password in **Cloud → Users → Auth Settings** (if not already on).
 
-**RLS policy design:**
+Email confirmation can remain **OFF** for MVP (enable auto-confirm). This means users sign up and immediately have an active session — no inbox verification required.
 
-| Table | SELECT | INSERT | UPDATE | DELETE |
-|-------|--------|--------|--------|--------|
-| `users` | `id = get_user_id_for_auth(auth.uid())` | service role only (edge functions create users) | `id = get_user_id_for_auth(auth.uid())` | N/A |
-| `voice_logs` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` |
-| `daily_reports` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | N/A |
-| `admin_reports` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | `user_id = get_user_id_for_auth(auth.uid())` | N/A |
+### Backend Compatibility With Existing auth_id / RLS / Edge Functions
 
-**Note on edge functions**: Edge functions use `SUPABASE_SERVICE_ROLE_KEY` which bypasses RLS. They will continue to work. The RLS policies protect against direct client-side access from unauthenticated or wrong users.
+**Everything already built works unchanged with email/password auth.** Specifically:
 
-### 2. Edge Function: `generate-report`
+| Component | Status | Why |
+|-----------|--------|-----|
+| `users.auth_id` column | ✅ Compatible | `auth.users.id` is the same regardless of sign-in method |
+| `get_user_id_for_auth()` | ✅ Compatible | Maps `auth.uid()` → `users.id`, method-agnostic |
+| All RLS policies | ✅ Compatible | Use `auth.uid()` which works identically for password auth |
+| `generate-report` JWT validation | ✅ Compatible | Validates JWT from `Authorization` header — same token format |
+| `regenerate-report-pdf` JWT validation | ✅ Compatible | Same pattern |
+| `resolveProfile()` in `useUser.ts` | ✅ Compatible | Looks up by `auth_id`, falls back to email binding — works for any auth method |
 
-**Changes (lines 141-175 area):**
-- Extract `Authorization` header from request
-- Validate JWT using `supabase.auth.getUser()` with anon key client
-- Look up `users.id` from `auth_id = auth_user.id`
-- Use that resolved `user_id` instead of the client-supplied one
-- Reject if no matching user found
-- Remove `user_id` from required input validation (it's now derived from JWT)
+**Zero backend/migration/RLS/edge-function changes required.**
 
-**Rest of function unchanged** — all downstream logic uses the resolved `user_id`.
+### Existing Users Migration Behavior
 
-### 3. Edge Function: `regenerate-report-pdf`
+The current `resolveProfile` + edge function binding strategy handles this correctly:
 
-**Same pattern:**
-- Extract and validate JWT from Authorization header
-- Resolve `user_id` from `auth_id`
-- Use resolved `user_id` for all lookups
-- Remove `user_id` from required input fields
+1. User signs up with email that already exists in `users` table (with `auth_id = NULL`)
+2. `resolveProfile` tries `auth_id` lookup → no match
+3. Falls back to email lookup → finds existing row with `auth_id = NULL`
+4. Sets user optimistically in frontend
+5. On first edge function call, `resolveUserId` binds `auth_id` to the existing row via service role
+6. Subsequent requests use `auth_id` directly
 
-### 4. NULL user_id inspection
+**One gap**: the client-side `resolveProfile` can't update `auth_id` itself (RLS blocks it since auth_id doesn't match yet). The edge function handles binding, but there's a window where the client can read via email match but can't write. This works for MVP because:
+- Profile reads happen via the optimistic set
+- Writes go through edge functions which bind `auth_id` on first call
 
-Will query existing rows to report counts of NULL `user_id` in `voice_logs` and `daily_reports`. No schema change yet — just reporting.
+### Password Recovery Diagnosis
 
-### 5. Frontend auth hook
+**This is the one tricky part.** Supabase password reset works via:
 
-**Replace `useUser` hook:**
-- Use `supabase.auth.signInWithOtp({ email })` for magic link login
-- On auth state change (`onAuthStateChange`), look up or create `users` row by email and bind `auth_id`
-- Session managed by Supabase Auth (no more localStorage `sitelog_user_id`)
-- Keep `project_name` on `users` table as before
+1. App calls `supabase.auth.resetPasswordForEmail(email, { redirectTo })`
+2. User receives email with a reset link
+3. Link opens in browser at the `redirectTo` URL with a recovery token
+4. App at that URL calls `supabase.auth.updateUser({ password })`
 
-**Update `Index.tsx`:**
-- Login flow calls OTP instead of direct insert
-- All `supabase.functions.invoke()` calls automatically include the JWT via the authenticated client
+**The problem**: This link opens in the device browser, not the Replit webview. This is the same browser-isolation issue as magic links.
 
-### Technical Details
+**MVP workaround options**:
 
-**Files changed:**
-1. New migration SQL (schema + function + RLS policies)
-2. `supabase/functions/generate-report/index.ts` — JWT validation + user_id resolution
-3. `supabase/functions/regenerate-report-pdf/index.ts` — same pattern
-4. `src/hooks/useUser.ts` — Supabase Auth OTP flow
-5. `src/pages/Index.tsx` — minor login flow adjustment
+- **Option A (simplest)**: The `redirectTo` points to the published Lovable web app URL (`https://site-voice-log.lovable.app/reset-password`). User resets password in the browser. Then returns to Replit app and signs in with new password. Not seamless but functional.
+- **Option B**: Build a standalone `/reset-password` page in the Lovable web app that handles the token and shows a "password updated, return to your app" message. Same as Option A but with a better UX.
+- **Option C**: Skip password reset entirely for MVP. If a user forgets their password, they contact support. Not ideal but simplest.
 
-**Migration risk:** Zero for existing data. `auth_id` is nullable; existing rows unaffected. Old `true` RLS policies are replaced, but edge functions use service role key (bypasses RLS). Frontend will require authentication after this change — unauthenticated access will be blocked by RLS.
+**Recommendation**: Option A/B. The reset flow happens rarely, and completing it in browser is acceptable. The user just signs back in with the new password in the Replit app.
 
-**Auth configuration:** Will use `cloud--configure_auth` to ensure email OTP is enabled. Will NOT enable auto-confirm (users must verify email).
+### Minimum Required Backend / Auth Setting Changes
+
+#### Required
+
+1. **Auth setting**: Enable email/password sign-up in **Cloud → Users → Auth Settings**
+2. **Auth setting**: Enable auto-confirm (skip email verification) for MVP
+3. **Auth setting**: Update project name to "SiteLog"
+4. **Frontend**: Replace `signInWithOtp` / `verifyOtp` with `signUp` / `signInWithPassword` in `useUser.ts`
+5. **Frontend**: Replace `EmailEntry.tsx` OTP UI with email + password sign-up/sign-in form
+6. **Frontend**: Add `/reset-password` route for browser-based password recovery
+
+#### Optional (not blocking)
+
+- Add password strength validation in the sign-up form
+- Add "forgot password" link that calls `resetPasswordForEmail`
+- Customize the password reset email template (requires custom email domain — defer)
+
+### Recommended MVP Auth Path
+
+```text
+SIGN UP:
+  Email + Password → supabase.auth.signUp({ email, password })
+  → auto-confirmed → session created → resolveProfile binds auth_id
+
+SIGN IN:
+  Email + Password → supabase.auth.signInWithPassword({ email, password })
+  → session created → resolveProfile resolves user
+
+PASSWORD RESET:
+  "Forgot password?" → supabase.auth.resetPasswordForEmail(email, { redirectTo })
+  → email with link → opens Lovable web app /reset-password
+  → user sets new password → returns to Replit app → signs in
+
+SESSION:
+  Supabase client persists session in localStorage
+  → auto-refresh on app reopen
+  → no re-login needed until token expires
+```
+
+**Files to change**: `useUser.ts`, `EmailEntry.tsx`, `Index.tsx`, add `/reset-password` page. **Zero backend/migration/edge-function changes.**
 

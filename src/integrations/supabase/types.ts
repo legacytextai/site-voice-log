@@ -123,6 +123,7 @@ export type Database = {
           created_at: string
           duration_seconds: number
           id: string
+          project_name: string | null
           recorded_at: string
           status: string
           transcript: string | null
@@ -133,6 +134,7 @@ export type Database = {
           created_at?: string
           duration_seconds: number
           id?: string
+          project_name?: string | null
           recorded_at?: string
           status?: string
           transcript?: string | null
@@ -143,6 +145,7 @@ export type Database = {
           created_at?: string
           duration_seconds?: number
           id?: string
+          project_name?: string | null
           recorded_at?: string
           status?: string
           transcript?: string | null

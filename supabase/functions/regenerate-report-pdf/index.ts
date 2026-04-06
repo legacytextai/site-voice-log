@@ -7,7 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Minimal PDF generator — copied verbatim from generate-report/index.ts
 function generatePdfBytes(title: string, content: string): Uint8Array {
   const lines = content.split("\n");
   const pageHeight = 842;
@@ -119,17 +118,82 @@ function generatePdfBytes(title: string, content: string): Uint8Array {
   return new TextEncoder().encode(pdf);
 }
 
+// Helper: resolve authenticated user_id from JWT
+async function resolveUserId(req: Request, supabaseUrl: string, anonKey: string, serviceClient: any): Promise<{ user_id: string; error?: never } | { user_id?: never; error: Response }> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return {
+      error: new Response(JSON.stringify({ error: "Unauthorized — missing or invalid Authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  const anonClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const { data: authData, error: authError } = await anonClient.auth.getUser();
+  if (authError || !authData?.user) {
+    return {
+      error: new Response(JSON.stringify({ error: "Unauthorized — invalid token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  const authUid = authData.user.id;
+  const authEmail = authData.user.email;
+
+  const { data: userData, error: userError } = await serviceClient
+    .from("users")
+    .select("id, email")
+    .eq("auth_id", authUid)
+    .maybeSingle();
+
+  if (userError) {
+    return {
+      error: new Response(JSON.stringify({ error: "Failed to resolve user" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  if (userData) return { user_id: userData.id };
+
+  if (authEmail) {
+    const { data: emailUser } = await serviceClient
+      .from("users")
+      .select("id, auth_id")
+      .eq("email", authEmail)
+      .maybeSingle();
+
+    if (emailUser && !emailUser.auth_id) {
+      await serviceClient.from("users").update({ auth_id: authUid }).eq("id", emailUser.id);
+      return { user_id: emailUser.id };
+    }
+  }
+
+  return {
+    error: new Response(JSON.stringify({ error: "User not found" }), {
+      status: 404,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    }),
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { user_id, project_name, report_date, content } = await req.json();
+    const { project_name, report_date, content } = await req.json();
 
-    // Validate required fields
     const missing: string[] = [];
-    if (!user_id) missing.push("user_id");
     if (!project_name) missing.push("project_name");
     if (!report_date) missing.push("report_date");
     if (!content) missing.push("content");
@@ -143,7 +207,13 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Resolve user_id from JWT
+    const resolved = await resolveUserId(req, supabaseUrl, anonKey, supabase);
+    if (resolved.error) return resolved.error;
+    const user_id = resolved.user_id;
 
     // Generate PDF
     const sanitizedName = project_name.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
@@ -151,7 +221,6 @@ serve(async (req) => {
     const pdfBytes = generatePdfBytes(pdfTitle, content);
     const pdfPath = `${report_date}/${sanitizedName}_Daily Report_${report_date}.pdf`;
 
-    // Upload PDF
     const { error: uploadError } = await supabase.storage
       .from("report-pdfs")
       .upload(pdfPath, pdfBytes, { contentType: "application/pdf", upsert: true });
@@ -166,7 +235,6 @@ serve(async (req) => {
 
     const pdfUrl = `${supabaseUrl}/storage/v1/object/public/report-pdfs/${pdfPath}`;
 
-    // Update daily_reports — if multiple rows match, update most recent only
     const { data: dailyRows } = await supabase
       .from("daily_reports")
       .select("id, created_at")
@@ -176,9 +244,6 @@ serve(async (req) => {
       .order("created_at", { ascending: false });
 
     let updatedDailyReport = false;
-    if (dailyRows && dailyRows.length > 1) {
-      console.warn(`[WARN] Found ${dailyRows.length} daily_reports rows for user_id=${user_id} report_date=${report_date} — updating most recent only (id=${dailyRows[0].id})`);
-    }
     if (dailyRows && dailyRows.length > 0) {
       await supabase
         .from("daily_reports")
@@ -187,7 +252,6 @@ serve(async (req) => {
       updatedDailyReport = true;
     }
 
-    // Update admin_reports — same conservative approach
     const { data: adminRows } = await supabase
       .from("admin_reports")
       .select("id, status, created_at")
@@ -197,9 +261,6 @@ serve(async (req) => {
       .order("created_at", { ascending: false });
 
     let updatedAdminReport = false;
-    if (adminRows && adminRows.length > 1) {
-      console.warn(`[WARN] Found ${adminRows.length} admin_reports rows for user_id=${user_id} report_date=${report_date} — updating most recent only (id=${adminRows[0].id})`);
-    }
     if (adminRows && adminRows.length > 0) {
       const updateData: Record<string, string> = { pdf_url: pdfUrl };
       if (adminRows[0].status !== "sent") {

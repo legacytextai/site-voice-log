@@ -20,7 +20,7 @@ const today = () =>
   });
 
 const Index = () => {
-  const { user, login, verifyOtp, logout, updateProjectName, isLoading: userLoading, otpSent } = useUser();
+  const { user, signUp, signIn, resetPassword, logout, updateProjectName, isLoading: userLoading } = useUser();
   const { isRecording, entries, toggleRecording, deleteEntry, debugLogs } = useVoiceRecorder(user?.id ?? null, user?.email);
   const [showDebug, setShowDebug] = useState(false);
   const [report, setReport] = useState<string | null>(null);
@@ -29,8 +29,13 @@ const Index = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const justLoggedInRef = useRef(false);
 
-  const handleLogin = async (email: string) => {
-    await login(email);
+  const handleSignUp = async (email: string, password: string) => {
+    await signUp(email, password);
+    justLoggedInRef.current = true;
+  };
+
+  const handleSignIn = async (email: string, password: string) => {
+    await signIn(email, password);
     justLoggedInRef.current = true;
   };
 
@@ -83,7 +88,7 @@ const Index = () => {
   }
 
   if (!user) {
-    return <EmailEntry onLogin={handleLogin} onVerifyOtp={verifyOtp} otpSent={otpSent} />;
+    return <EmailEntry onSignUp={handleSignUp} onSignIn={handleSignIn} onResetPassword={resetPassword} />;
   }
 
   return (

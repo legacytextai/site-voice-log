@@ -414,7 +414,9 @@ Rules:
     }
 
     // Generate report with trusted transcripts only
-    const todayStr = new Date().toLocaleDateString("en-US", {
+    const reportDate = inputReportDate || new Date().toISOString().split("T")[0];
+    const reportDateObj = inputReportDate ? new Date(inputReportDate + "T00:00:00") : new Date();
+    const todayStr = reportDateObj.toLocaleDateString("en-US", {
       weekday: "long", month: "long", day: "numeric", year: "numeric",
     });
 

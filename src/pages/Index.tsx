@@ -88,7 +88,7 @@ const Index = () => {
   }
 
   if (!user) {
-    return <EmailEntry onLogin={handleLogin} onVerifyOtp={verifyOtp} otpSent={otpSent} />;
+    return <EmailEntry onSignUp={handleSignUp} onSignIn={handleSignIn} onResetPassword={resetPassword} />;
   }
 
   return (

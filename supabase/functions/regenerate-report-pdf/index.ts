@@ -172,6 +172,7 @@ serve(async (req) => {
       .select("id, created_at")
       .eq("user_id", user_id)
       .eq("report_date", report_date)
+      .eq("project_name", project_name)
       .order("created_at", { ascending: false });
 
     let updatedDailyReport = false;
@@ -192,6 +193,7 @@ serve(async (req) => {
       .select("id, status, created_at")
       .eq("user_id", user_id)
       .eq("report_date", report_date)
+      .eq("project_name", project_name)
       .order("created_at", { ascending: false });
 
     let updatedAdminReport = false;

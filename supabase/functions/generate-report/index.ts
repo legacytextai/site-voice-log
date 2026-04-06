@@ -144,7 +144,7 @@ serve(async (req) => {
   }
 
   try {
-    const { log_ids, user_id, project_name } = await req.json();
+    const { log_ids, user_id, project_name, report_date: inputReportDate } = await req.json();
     const projectName = (project_name || "").trim() || "Untitled Project";
 
     if (!log_ids || !Array.isArray(log_ids) || log_ids.length === 0) {
@@ -368,7 +368,7 @@ Rules:
     if (transcripts.length === 0) {
       const emptyReport = "DAILY SITE REPORT\n\nNo activities reported. No usable field logs recorded.\n\n— End of Report —";
 
-      const reportDate = new Date().toISOString().split("T")[0];
+      const reportDate = inputReportDate || new Date().toISOString().split("T")[0];
       const pdfBytes = generatePdfBytes(`SiteLog Daily Report — ${projectName}`, emptyReport);
       const sanitizedName = projectName.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
       const pdfPath = `${reportDate}/${sanitizedName}_Daily Report_${reportDate}.pdf`;
@@ -385,13 +385,14 @@ Rules:
         .select("id")
         .eq("user_id", user_id)
         .eq("report_date", reportDate)
+        .eq("project_name", projectName)
         .maybeSingle();
 
       let report;
       if (existingReport) {
         const { data, error } = await supabase
           .from("daily_reports")
-          .update({ content: emptyReport, log_ids, pdf_url: pdfUrl, user_email: userEmail })
+          .update({ content: emptyReport, log_ids, pdf_url: pdfUrl, user_email: userEmail, project_name: projectName })
           .eq("id", existingReport.id)
           .select()
           .single();
@@ -400,7 +401,7 @@ Rules:
       } else {
         const { data, error } = await supabase
           .from("daily_reports")
-          .insert({ content: emptyReport, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl, user_email: userEmail })
+          .insert({ content: emptyReport, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl, user_email: userEmail, project_name: projectName })
           .select()
           .single();
         if (error) throw error;
@@ -413,7 +414,9 @@ Rules:
     }
 
     // Generate report with trusted transcripts only
-    const todayStr = new Date().toLocaleDateString("en-US", {
+    const reportDate = inputReportDate || new Date().toISOString().split("T")[0];
+    const reportDateObj = inputReportDate ? new Date(inputReportDate + "T00:00:00") : new Date();
+    const todayStr = reportDateObj.toLocaleDateString("en-US", {
       weekday: "long", month: "long", day: "numeric", year: "numeric",
     });
 
@@ -494,7 +497,7 @@ Be factual. No embellishment. This is documentation-grade output.`,
     const reportContent = reportResult.choices?.[0]?.message?.content?.trim() || "";
 
     // Generate PDF
-    const reportDate = new Date().toISOString().split("T")[0];
+    // reportDate already defined above
     const pdfBytes = generatePdfBytes(`SiteLog Daily Report — ${projectName} — ${todayStr}`, reportContent);
     const sanitizedName = projectName.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
     const pdfPath = `${reportDate}/${sanitizedName}_Daily Report_${reportDate}.pdf`;
@@ -518,13 +521,14 @@ Be factual. No embellishment. This is documentation-grade output.`,
       .select("id")
       .eq("user_id", user_id)
       .eq("report_date", reportDate)
+      .eq("project_name", projectName)
       .maybeSingle();
 
     let report;
     if (existingReport) {
       const { data, error } = await supabase
         .from("daily_reports")
-        .update({ content: reportContent, log_ids, pdf_url: pdfUrl, user_email: userEmail })
+        .update({ content: reportContent, log_ids, pdf_url: pdfUrl, user_email: userEmail, project_name: projectName })
         .eq("id", existingReport.id)
         .select()
         .single();
@@ -533,7 +537,7 @@ Be factual. No embellishment. This is documentation-grade output.`,
     } else {
       const { data, error } = await supabase
         .from("daily_reports")
-        .insert({ content: reportContent, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl, user_email: userEmail })
+        .insert({ content: reportContent, log_ids, report_date: reportDate, user_id, pdf_url: pdfUrl, user_email: userEmail, project_name: projectName })
         .select()
         .single();
       if (error) throw error;
@@ -546,6 +550,7 @@ Be factual. No embellishment. This is documentation-grade output.`,
       .select("id, status")
       .eq("user_id", user_id)
       .eq("report_date", reportDate)
+      .eq("project_name", projectName)
       .maybeSingle();
 
     if (existingAdmin) {

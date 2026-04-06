@@ -550,6 +550,7 @@ Be factual. No embellishment. This is documentation-grade output.`,
       .select("id, status")
       .eq("user_id", user_id)
       .eq("report_date", reportDate)
+      .eq("project_name", projectName)
       .maybeSingle();
 
     if (existingAdmin) {

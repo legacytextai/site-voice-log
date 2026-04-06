@@ -521,6 +521,7 @@ Be factual. No embellishment. This is documentation-grade output.`,
       .select("id")
       .eq("user_id", user_id)
       .eq("report_date", reportDate)
+      .eq("project_name", projectName)
       .maybeSingle();
 
     let report;

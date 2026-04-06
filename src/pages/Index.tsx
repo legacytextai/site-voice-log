@@ -20,7 +20,7 @@ const today = () =>
   });
 
 const Index = () => {
-  const { user, login, logout, updateProjectName, isLoading: userLoading } = useUser();
+  const { user, login, verifyOtp, logout, updateProjectName, isLoading: userLoading, otpSent } = useUser();
   const { isRecording, entries, toggleRecording, deleteEntry, debugLogs } = useVoiceRecorder(user?.id ?? null, user?.email);
   const [showDebug, setShowDebug] = useState(false);
   const [report, setReport] = useState<string | null>(null);
@@ -60,7 +60,7 @@ const Index = () => {
       const projectName = user.project_name?.trim() || "Untitled Project";
       const { data, error } = await supabase.functions.invoke(
         "generate-report",
-        { body: { log_ids: savedIds, user_id: user.id, project_name: projectName } }
+        { body: { log_ids: savedIds, project_name: projectName } }
       );
 
       if (error) throw error;
@@ -83,7 +83,7 @@ const Index = () => {
   }
 
   if (!user) {
-    return <EmailEntry onLogin={handleLogin} />;
+    return <EmailEntry onLogin={handleLogin} onVerifyOtp={verifyOtp} otpSent={otpSent} />;
   }
 
   return (

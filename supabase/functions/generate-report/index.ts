@@ -392,7 +392,7 @@ Rules:
       if (existingReport) {
         const { data, error } = await supabase
           .from("daily_reports")
-          .update({ content: emptyReport, log_ids, pdf_url: pdfUrl, user_email: userEmail })
+          .update({ content: emptyReport, log_ids, pdf_url: pdfUrl, user_email: userEmail, project_name: projectName })
           .eq("id", existingReport.id)
           .select()
           .single();

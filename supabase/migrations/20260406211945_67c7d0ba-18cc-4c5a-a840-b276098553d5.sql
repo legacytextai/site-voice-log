@@ -1,0 +1,1 @@
+ALTER TABLE daily_reports DROP CONSTRAINT daily_reports_user_date_unique;

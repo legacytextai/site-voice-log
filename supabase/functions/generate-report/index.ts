@@ -528,7 +528,7 @@ Be factual. No embellishment. This is documentation-grade output.`,
     if (existingReport) {
       const { data, error } = await supabase
         .from("daily_reports")
-        .update({ content: reportContent, log_ids, pdf_url: pdfUrl, user_email: userEmail })
+        .update({ content: reportContent, log_ids, pdf_url: pdfUrl, user_email: userEmail, project_name: projectName })
         .eq("id", existingReport.id)
         .select()
         .single();

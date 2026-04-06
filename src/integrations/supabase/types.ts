@@ -62,6 +62,7 @@ export type Database = {
           id: string
           log_ids: string[]
           pdf_url: string | null
+          project_name: string | null
           report_date: string
           user_email: string | null
           user_id: string | null
@@ -72,6 +73,7 @@ export type Database = {
           id?: string
           log_ids: string[]
           pdf_url?: string | null
+          project_name?: string | null
           report_date?: string
           user_email?: string | null
           user_id?: string | null
@@ -82,6 +84,7 @@ export type Database = {
           id?: string
           log_ids?: string[]
           pdf_url?: string | null
+          project_name?: string | null
           report_date?: string
           user_email?: string | null
           user_id?: string | null

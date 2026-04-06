@@ -368,7 +368,7 @@ Rules:
     if (transcripts.length === 0) {
       const emptyReport = "DAILY SITE REPORT\n\nNo activities reported. No usable field logs recorded.\n\n— End of Report —";
 
-      const reportDate = new Date().toISOString().split("T")[0];
+      const reportDate = inputReportDate || new Date().toISOString().split("T")[0];
       const pdfBytes = generatePdfBytes(`SiteLog Daily Report — ${projectName}`, emptyReport);
       const sanitizedName = projectName.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
       const pdfPath = `${reportDate}/${sanitizedName}_Daily Report_${reportDate}.pdf`;

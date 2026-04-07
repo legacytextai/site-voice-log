@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import RecordButton from "@/components/RecordButton";
 import LogList from "@/components/LogList";
 import ReportSection from "@/components/ReportSection";
@@ -20,7 +21,16 @@ const today = () =>
   });
 
 const Index = () => {
+  const navigate = useNavigate();
   const { user, signUp, signIn, resetPassword, logout, updateProjectName, isLoading: userLoading } = useUser();
+
+  // Catch recovery tokens landing on homepage (Replit fallback case)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes("type=recovery")) {
+      navigate("/reset-password" + hash, { replace: true });
+    }
+  }, [navigate]);
   const { isRecording, entries, toggleRecording, deleteEntry, debugLogs } = useVoiceRecorder(user?.id ?? null, user?.email);
   const [showDebug, setShowDebug] = useState(false);
   const [report, setReport] = useState<string | null>(null);

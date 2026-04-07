@@ -3,3 +3,6 @@ project_id = "gppoaaekwbvlshyxjsqe"
 [auth]
 site_url = "https://site-voice-log.lovable.app"
 additional_redirect_urls = ["https://site-voice-log.lovable.app/reset-password"]
+
+[functions.process-email-queue]
+verify_jwt = true

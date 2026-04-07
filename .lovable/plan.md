@@ -1,59 +1,36 @@
 
 
-## Diagnosis: Password Reset Broken — Two Distinct Issues Found
+## Diagnosis: Password Reset Redirect Mismatch + UX Fix
 
-### Exact Reset Error
+### Root Cause Of Redirect Mismatch
 
-**Case 2 (Lovable web app "Something went wrong")**: The auth logs show that `resetPasswordForEmail` calls DO succeed (HTTP 200 from `/recover`). However, the user hit **429 rate limiting** ("For security purposes, you can only request this after 26 seconds") on subsequent attempts. The `catch` block in `EmailEntry.tsx` line 37 swallows the actual error and shows a generic "Something went wrong" — hiding the real rate-limit message. The first attempt likely succeeded and sent the email, but the user didn't realize it and retried, hitting rate limits.
+The Lovable web app's `useUser.ts` correctly hardcodes `redirectTo: "https://site-voice-log.lovable.app/reset-password"`. But the **Replit app has its own separate codebase** with its own `resetPasswordForEmail` call — likely still using `window.location.origin` (a Replit webview URL). Since that Replit URL isn't in the Supabase redirect allowlist, Supabase silently falls back to the **Site URL root** (`https://site-voice-log.lovable.app/`), landing on the homepage.
 
-**Case 1 (Link opens homepage)**: Auth logs confirm the `/verify` endpoint returns 303 (redirect) after clicking the email link. But the redirect destination is the **Site URL root** (`https://site-voice-log.lovable.app/`) instead of `/reset-password`. This happens because `https://site-voice-log.lovable.app/reset-password` is **not in the Supabase Auth redirect allowlist**. When the `redirect_to` parameter isn't in the allowlist, Supabase silently falls back to the Site URL root.
+We cannot fix the Replit code (per instructions). The fix must be on the Lovable web app side.
 
-### Root Cause
+### Exact Fix Needed
 
-Two independent bugs:
+**Add recovery token detection to the Index/homepage route.** If someone lands on `/` with a recovery hash token (e.g., `#access_token=...&type=recovery`), automatically redirect them to `/reset-password` with the hash preserved. This catches the Supabase fallback case — no matter where the reset was triggered, the recovery token will be detected and routed correctly.
 
-1. **Redirect allowlist missing entry** — The `redirectTo` in the code points to `/reset-password`, but this URL was never added to the auth redirect allowlist. Supabase falls back to root → homepage.
+**File:** `src/pages/Index.tsx` — add an early `useEffect` that checks `window.location.hash` for `type=recovery` and redirects to `/reset-password` + hash.
 
-2. **Error swallowing in EmailEntry** — The forgot-password `catch` block hides the actual error (e.g. "429: rate limit") behind a generic "Something went wrong" message, making the user think the first send failed when it actually succeeded.
+### Reset Success Page UX Fix
 
-3. **ResetPassword page has no timeout/fallback** — If someone lands on `/reset-password` without a recovery token (which happens because of bug #1), they see "Loading recovery session…" forever with no way to proceed.
+The current "Go to App" button calls `navigate("/")`, which just loads the Lovable homepage in the browser — useless for a Replit user.
 
-### Plan
+**Replace with:**
+- Remove the button entirely
+- Show clear text: "Password updated successfully. Return to the SiteLog app and sign in with your new password."
+- No fake deep-link button
 
-**Step 1 — Add redirect URL to auth allowlist**
-
-Use `cloud--configure_auth` to add `https://site-voice-log.lovable.app/reset-password` to the allowed redirect URLs. This is the critical fix — without it, the email link will always land on the homepage.
-
-**Step 2 — Fix error display in EmailEntry.tsx**
-
-Change line 37 from:
-```
-setError("Something went wrong. Please try again.");
-```
-to:
-```
-setError(err?.message || "Something went wrong. Please try again.");
-```
-This surfaces the actual Supabase error (rate limit, network issue, etc.) instead of hiding it.
-
-**Step 3 — Add timeout/fallback to ResetPassword.tsx**
-
-Add a timeout (e.g. 5 seconds) to the "Loading recovery session…" state. If `isRecovery` doesn't become `true` within that time, show a helpful message: "No recovery session found. Please request a new password reset link." with a link back to the sign-in page. This prevents infinite loading when someone reaches the page without a valid token.
+**File:** `src/pages/ResetPassword.tsx` — update the success state JSX.
 
 ### Files To Change
 
 | File | Change |
 |------|--------|
-| Auth settings | Add `https://site-voice-log.lovable.app/reset-password` to redirect allowlist |
-| `src/components/EmailEntry.tsx` | Show actual error message instead of generic text |
-| `src/pages/ResetPassword.tsx` | Add timeout fallback for missing recovery session |
+| `src/pages/Index.tsx` | Add `useEffect` to detect `type=recovery` in hash and redirect to `/reset-password` |
+| `src/pages/ResetPassword.tsx` | Replace "Go to App" button with instructional text (no navigation) |
 
-### What To Test Next
-
-After implementation:
-1. Wait 30+ seconds (rate limit cooldown), then send a fresh reset from the Lovable web app — should show "Password reset link sent"
-2. Click the link in the email — should open `/reset-password` (not homepage)
-3. Should see the password form, not "Loading recovery session…"
-4. Set new password → success message
-5. Return to Replit app → sign in with new password
+Two files, minimal changes, no backend/auth setting changes needed.
 

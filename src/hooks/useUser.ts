@@ -14,6 +14,12 @@ export function useUser() {
   const resolveProfile = useCallback(async (authUser: { id: string; email?: string }) => {
     const email = authUser.email || "";
 
+    // Bind auth_id for legacy users (bypasses RLS via security definer)
+    await supabase.rpc('bind_auth_id', {
+      auth_uid: authUser.id,
+      user_email: email,
+    });
+
     const { data: byAuth } = await supabase
       .from("users")
       .select("id, email, project_name")

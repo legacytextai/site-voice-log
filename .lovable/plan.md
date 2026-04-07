@@ -1,64 +1,59 @@
 
 
-## Diagnosis: Password Reset Redirect Issue
+## Diagnosis: Password Reset Broken — Two Distinct Issues Found
+
+### Exact Reset Error
+
+**Case 2 (Lovable web app "Something went wrong")**: The auth logs show that `resetPasswordForEmail` calls DO succeed (HTTP 200 from `/recover`). However, the user hit **429 rate limiting** ("For security purposes, you can only request this after 26 seconds") on subsequent attempts. The `catch` block in `EmailEntry.tsx` line 37 swallows the actual error and shows a generic "Something went wrong" — hiding the real rate-limit message. The first attempt likely succeeded and sent the email, but the user didn't realize it and retried, hitting rate limits.
+
+**Case 1 (Link opens homepage)**: Auth logs confirm the `/verify` endpoint returns 303 (redirect) after clicking the email link. But the redirect destination is the **Site URL root** (`https://site-voice-log.lovable.app/`) instead of `/reset-password`. This happens because `https://site-voice-log.lovable.app/reset-password` is **not in the Supabase Auth redirect allowlist**. When the `redirect_to` parameter isn't in the allowlist, Supabase silently falls back to the Site URL root.
 
 ### Root Cause
 
-The `redirectTo` in `useUser.ts` line 97 uses `window.location.origin`, which resolves to the **Replit webview origin** (e.g., `https://<replit-id>.replit.dev`), not the published Lovable app URL. When Supabase processes the reset, it redirects to `https://<replit-id>.replit.dev/reset-password` — but the user opens the link in their device browser, which has no access to the Replit webview. The browser likely fails to load the Replit URL correctly and falls back or redirects to the Lovable homepage.
+Two independent bugs:
 
-Additionally, Supabase Auth's **Site URL** setting determines the base redirect. If it's set to `https://site-voice-log.lovable.app` without `/reset-password`, and the `redirectTo` from the Replit origin isn't in the allowed redirect URLs list, Supabase falls back to the Site URL root — the homepage.
+1. **Redirect allowlist missing entry** — The `redirectTo` in the code points to `/reset-password`, but this URL was never added to the auth redirect allowlist. Supabase falls back to root → homepage.
 
-### Current Wrong Redirect
+2. **Error swallowing in EmailEntry** — The forgot-password `catch` block hides the actual error (e.g. "429: rate limit") behind a generic "Something went wrong" message, making the user think the first send failed when it actually succeeded.
 
-- `redirectTo` = `${window.location.origin}/reset-password` = Replit webview URL (not accessible in device browser)
-- Supabase likely rejects this as an unallowed redirect and falls back to Site URL (`https://site-voice-log.lovable.app/`)
-- User lands on homepage, not the reset page
+3. **ResetPassword page has no timeout/fallback** — If someone lands on `/reset-password` without a recovery token (which happens because of bug #1), they see "Loading recovery session…" forever with no way to proceed.
 
-### Exact Redirect Fix
+### Plan
 
-**One code change** in `src/hooks/useUser.ts` line 97:
+**Step 1 — Add redirect URL to auth allowlist**
 
-Replace:
-```typescript
-redirectTo: `${window.location.origin}/reset-password`,
+Use `cloud--configure_auth` to add `https://site-voice-log.lovable.app/reset-password` to the allowed redirect URLs. This is the critical fix — without it, the email link will always land on the homepage.
+
+**Step 2 — Fix error display in EmailEntry.tsx**
+
+Change line 37 from:
 ```
-
-With:
-```typescript
-redirectTo: `https://site-voice-log.lovable.app/reset-password`,
+setError("Something went wrong. Please try again.");
 ```
+to:
+```
+setError(err?.message || "Something went wrong. Please try again.");
+```
+This surfaces the actual Supabase error (rate limit, network issue, etc.) instead of hiding it.
 
-This hardcodes the redirect to the published Lovable app's `/reset-password` route, which:
-- Is accessible in any device browser
-- Already has the `ResetPassword` component mounted at that route
-- Will correctly handle the recovery token from the URL hash
+**Step 3 — Add timeout/fallback to ResetPassword.tsx**
 
-No other changes needed — the `/reset-password` route exists in `App.tsx` (line 20), and the `ResetPassword.tsx` component already handles `PASSWORD_RECOVERY` events and `type=recovery` hash detection.
+Add a timeout (e.g. 5 seconds) to the "Loading recovery session…" state. If `isRecovery` doesn't become `true` within that time, show a helpful message: "No recovery session found. Please request a new password reset link." with a link back to the sign-in page. This prevents infinite loading when someone reaches the page without a valid token.
 
-### Reset Password Route Plan
+### Files To Change
 
-Already implemented and correct:
-- Route: `/reset-password` in `App.tsx`
-- Component: `ResetPassword.tsx` — detects recovery session, shows password form, calls `updateUser({ password })`
-- Success state shows "return to app" message
-
-### Email Link Rendering
-
-The invisible/poorly rendered link is a default Supabase email template issue. To fix this properly would require setting up a custom email domain and scaffolding auth email templates. This is **not required** for the redirect fix — the link still works when tapped (even if visually broken). We can address email template branding separately.
+| File | Change |
+|------|--------|
+| Auth settings | Add `https://site-voice-log.lovable.app/reset-password` to redirect allowlist |
+| `src/components/EmailEntry.tsx` | Show actual error message instead of generic text |
+| `src/pages/ResetPassword.tsx` | Add timeout fallback for missing recovery session |
 
 ### What To Test Next
 
-After implementing the one-line redirect fix:
-1. Tap "Forgot password?" in the Replit app
-2. Enter email, submit
-3. Open the reset email on your phone
-4. Tap the link area — should open `https://site-voice-log.lovable.app/reset-password`
-5. The page should show "Set your new password" form (not the homepage)
-6. Enter new password, submit
-7. Return to Replit app, sign in with new password
-
-### Technical Details
-
-**Files to change:** 1 file, 1 line
-- `src/hooks/useUser.ts` line 97: hardcode `redirectTo` to `https://site-voice-log.lovable.app/reset-password`
+After implementation:
+1. Wait 30+ seconds (rate limit cooldown), then send a fresh reset from the Lovable web app — should show "Password reset link sent"
+2. Click the link in the email — should open `/reset-password` (not homepage)
+3. Should see the password form, not "Loading recovery session…"
+4. Set new password → success message
+5. Return to Replit app → sign in with new password
 

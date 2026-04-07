@@ -9,6 +9,7 @@ const ResetPassword = () => {
   const [success, setSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRecovery, setIsRecovery] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -25,7 +26,15 @@ const ResetPassword = () => {
       setIsRecovery(true);
     }
 
-    return () => subscription.unsubscribe();
+    // Timeout fallback after 5 seconds
+    const timeout = setTimeout(() => {
+      setTimedOut(true);
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

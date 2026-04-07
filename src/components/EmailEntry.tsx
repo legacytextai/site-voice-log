@@ -34,8 +34,8 @@ const EmailEntry = ({ onSignUp, onSignIn, onResetPassword }: EmailEntryProps) =>
       try {
         await onResetPassword(email.trim().toLowerCase());
         setInfo("Password reset link sent. Check your email.");
-      } catch {
-        setError("Something went wrong. Please try again.");
+      } catch (err: any) {
+        setError(err?.message || "Something went wrong. Please try again.");
       } finally {
         setIsSubmitting(false);
       }

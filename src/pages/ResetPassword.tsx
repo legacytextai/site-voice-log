@@ -69,13 +69,7 @@ const ResetPassword = () => {
         <div className="w-full max-w-sm space-y-6 text-center">
           <h1 className="text-lg font-bold text-foreground tracking-tight">SiteLog</h1>
           <p className="text-sm text-foreground">Password updated successfully!</p>
-          <p className="text-xs text-muted-foreground">You can now return to the app and sign in with your new password.</p>
-          <button
-            onClick={() => navigate("/")}
-            className="w-full py-3.5 bg-foreground text-background text-sm font-medium tracking-wide uppercase rounded-lg transition-opacity duration-150 active:opacity-80"
-          >
-            Go to App
-          </button>
+          <p className="text-xs text-muted-foreground mt-2">Return to the SiteLog app and sign in with your new password.</p>
         </div>
       </div>
     );

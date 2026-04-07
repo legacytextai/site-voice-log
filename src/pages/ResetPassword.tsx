@@ -9,6 +9,7 @@ const ResetPassword = () => {
   const [success, setSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRecovery, setIsRecovery] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -25,7 +26,15 @@ const ResetPassword = () => {
       setIsRecovery(true);
     }
 
-    return () => subscription.unsubscribe();
+    // Timeout fallback after 5 seconds
+    const timeout = setTimeout(() => {
+      setTimedOut(true);
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,7 +86,20 @@ const ResetPassword = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="w-full max-w-sm space-y-6 text-center">
           <h1 className="text-lg font-bold text-foreground tracking-tight">SiteLog</h1>
-          <p className="text-sm text-muted-foreground">Loading recovery session…</p>
+          {timedOut ? (
+            <>
+              <p className="text-sm text-foreground">No recovery session found.</p>
+              <p className="text-xs text-muted-foreground">Please request a new password reset link from the sign-in page.</p>
+              <button
+                onClick={() => navigate("/")}
+                className="w-full py-3.5 bg-foreground text-background text-sm font-medium tracking-wide uppercase rounded-lg transition-opacity duration-150 active:opacity-80"
+              >
+                Back to Sign In
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading recovery session…</p>
+          )}
         </div>
       </div>
     );

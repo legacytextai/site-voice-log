@@ -172,6 +172,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bind_auth_id: {
+        Args: { auth_uid: string; user_email: string }
+        Returns: undefined
+      }
       get_user_id_for_auth: { Args: { auth_uid: string }; Returns: string }
     }
     Enums: {

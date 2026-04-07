@@ -1,93 +1,51 @@
 
 
-## Fix: Atomic Profile Resolution RPC (Revised)
+## Fix: Loading Screen Deadlock in useUser.ts
 
-### Database Migration
+### Root Cause
 
-Create `get_or_create_user_profile` with both revisions incorporated:
+In `useUser.ts` line 31, `onAuthStateChange` callback uses `await resolveProfile(session.user)`. The Supabase auth client warns against awaiting async operations inside this callback — it can deadlock the internal auth state machine, preventing `setIsLoading(false)` from executing.
 
-```sql
-CREATE OR REPLACE FUNCTION public.get_or_create_user_profile(auth_uid uuid, user_email text)
-RETURNS TABLE(id uuid, email text, project_name text)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  _id uuid;
-  _email text;
-  _project_name text;
-BEGIN
-  -- Case 1: already bound to this auth user
-  SELECT u.id, u.email, u.project_name INTO _id, _email, _project_name
-  FROM public.users u WHERE u.auth_id = auth_uid LIMIT 1;
-  IF FOUND THEN
-    RETURN QUERY SELECT _id, _email, _project_name;
-    RETURN;
-  END IF;
+Additionally, both `onAuthStateChange` and `getSession().then()` race to call `resolveProfile`, potentially causing double-execution or missed `isLoading = false` calls if one path fails.
 
-  -- Case 2: email exists — check auth_id state
-  SELECT u.id, u.email, u.project_name, u.auth_id INTO _id, _email, _project_name
-  FROM public.users u WHERE u.email = user_email LIMIT 1;
+### Fix
 
-  IF FOUND THEN
-    -- 2a: already linked to a DIFFERENT auth user → error
-    IF _id IS NOT NULL AND (SELECT u.auth_id FROM public.users u WHERE u.email = user_email) IS NOT NULL THEN
-      RAISE EXCEPTION 'Email already linked to another account';
-    END IF;
-    -- 2b: legacy row with NULL auth_id → bind it
-    UPDATE public.users u SET auth_id = auth_uid
-    WHERE u.email = user_email AND u.auth_id IS NULL
-    RETURNING u.id, u.email, u.project_name INTO _id, _email, _project_name;
-    RETURN QUERY SELECT _id, _email, _project_name;
-    RETURN;
-  END IF;
+Refactor `useUser.ts` to:
 
-  -- Case 3: no row at all → create
-  INSERT INTO public.users (email, auth_id)
-  VALUES (user_email, auth_uid)
-  RETURNING public.users.id, public.users.email, public.users.project_name
-  INTO _id, _email, _project_name;
-
-  RETURN QUERY SELECT _id, _email, _project_name;
-END;
-$$;
-
--- Lock down permissions: only authenticated users can call this
-REVOKE ALL ON FUNCTION public.get_or_create_user_profile(uuid, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_or_create_user_profile(uuid, text) TO authenticated;
-```
-
-**Revision 1 handled**: Case 2a explicitly checks if the email row has a non-NULL `auth_id` that differs from the caller's. Raises `'Email already linked to another account'` instead of silently failing or hitting a constraint error.
-
-**Revision 2 handled**: `REVOKE ALL FROM PUBLIC` removes default execute access. `GRANT EXECUTE TO authenticated` restricts the function to signed-in users only. Anonymous callers cannot invoke it.
-
-### Frontend Change: `src/hooks/useUser.ts`
-
-Replace the multi-step `resolveProfile` body with:
+1. **Remove `await` from `onAuthStateChange`** — use fire-and-forget for `resolveProfile`
+2. **Gate on `getSession` only for initial load** — set `isLoading = false` after `getSession` resolves
+3. **Let `onAuthStateChange` handle subsequent auth changes** (sign in/out) without blocking
 
 ```typescript
-const resolveProfile = useCallback(async (authUser: { id: string; email?: string }) => {
-  const email = authUser.email || "";
-  const { data, error } = await supabase.rpc('get_or_create_user_profile', {
-    auth_uid: authUser.id,
-    user_email: email,
+useEffect(() => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    (_event, session) => {
+      if (session?.user) {
+        resolveProfile(session.user);  // fire-and-forget — no await
+      } else {
+        setUser(null);
+      }
+    }
+  );
+
+  supabase.auth.getSession().then(async ({ data: { session } }) => {
+    if (session?.user) {
+      await resolveProfile(session.user);
+    }
+    setIsLoading(false);  // only place that sets loading false
   });
-  if (error || !data || data.length === 0) {
-    console.error("Profile resolution failed:", error?.message);
-    return;
-  }
-  const profile = data[0];
-  setUser({ id: profile.id, email: profile.email, project_name: profile.project_name });
-}, []);
+
+  return () => subscription.unsubscribe();
+}, [resolveProfile]);
 ```
 
-The existing `bind_auth_id` call and all fallback SELECT/INSERT logic are removed — the RPC handles everything atomically.
+Key change: `onAuthStateChange` no longer awaits and no longer sets `isLoading`. The initial load is handled entirely by `getSession`, which is safe to await.
 
-### Files To Change
+### File To Change
 
-| Target | Change |
-|--------|--------|
-| Database migration | Create `get_or_create_user_profile` function + explicit GRANT |
-| `src/hooks/useUser.ts` | Replace `resolveProfile` with single RPC call |
+| File | Change |
+|------|--------|
+| `src/hooks/useUser.ts` | Remove `await` and `setIsLoading` from `onAuthStateChange` callback |
+
+One file, ~3 lines changed.
 

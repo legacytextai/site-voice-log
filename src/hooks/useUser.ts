@@ -13,15 +13,15 @@ export function useUser() {
 
   const resolveProfile = useCallback(async (authUser: { id: string; email?: string }) => {
     const email = authUser.email || "";
-    const { data, error } = await supabase.rpc('get_or_create_user_profile', {
+    const { data, error } = await supabase.rpc('get_or_create_user_profile' as any, {
       auth_uid: authUser.id,
       user_email: email,
     });
-    if (error || !data || data.length === 0) {
+    if (error || !data || (data as any[]).length === 0) {
       console.error("Profile resolution failed:", error?.message);
       return;
     }
-    const profile = data[0];
+    const profile = (data as any[])[0];
     setUser({ id: profile.id, email: profile.email, project_name: profile.project_name });
   }, []);
 

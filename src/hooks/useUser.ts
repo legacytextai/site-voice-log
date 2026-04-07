@@ -27,13 +27,12 @@ export function useUser() {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (_event, session) => {
         if (session?.user) {
-          await resolveProfile(session.user);
+          resolveProfile(session.user);
         } else {
           setUser(null);
         }
-        setIsLoading(false);
       }
     );
 

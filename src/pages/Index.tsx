@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import RecordButton from "@/components/RecordButton";
 import LogList from "@/components/LogList";
 import ReportSection from "@/components/ReportSection";

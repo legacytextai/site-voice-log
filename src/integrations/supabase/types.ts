@@ -176,6 +176,14 @@ export type Database = {
         Args: { auth_uid: string; user_email: string }
         Returns: undefined
       }
+      get_or_create_user_profile: {
+        Args: { auth_uid: string; user_email: string }
+        Returns: {
+          email: string
+          id: string
+          project_name: string
+        }[]
+      }
       get_user_id_for_auth: { Args: { auth_uid: string }; Returns: string }
     }
     Enums: {

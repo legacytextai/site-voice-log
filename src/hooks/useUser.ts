@@ -13,57 +13,16 @@ export function useUser() {
 
   const resolveProfile = useCallback(async (authUser: { id: string; email?: string }) => {
     const email = authUser.email || "";
-
-    // Bind auth_id for legacy users (bypasses RLS via security definer)
-    await supabase.rpc('bind_auth_id', {
+    const { data, error } = await supabase.rpc('get_or_create_user_profile' as any, {
       auth_uid: authUser.id,
       user_email: email,
     });
-
-    const { data: byAuth } = await supabase
-      .from("users")
-      .select("id, email, project_name")
-      .eq("auth_id", authUser.id)
-      .maybeSingle();
-
-    if (byAuth) {
-      setUser({ id: byAuth.id, email: byAuth.email, project_name: byAuth.project_name });
+    if (error || !data || (data as any[]).length === 0) {
+      console.error("Profile resolution failed:", error?.message);
       return;
     }
-
-    const { data: byEmail } = await supabase
-      .from("users")
-      .select("id, email, project_name, auth_id")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (byEmail) {
-      setUser({ id: byEmail.id, email: byEmail.email, project_name: byEmail.project_name });
-      return;
-    }
-
-    const { data: newUser, error } = await supabase
-      .from("users")
-      .insert({ email, auth_id: authUser.id })
-      .select("id, email, project_name")
-      .single();
-
-    if (error) {
-      console.error("Failed to create user profile:", error);
-      const { data: retry } = await supabase
-        .from("users")
-        .select("id, email, project_name")
-        .eq("auth_id", authUser.id)
-        .maybeSingle();
-      if (retry) {
-        setUser({ id: retry.id, email: retry.email, project_name: retry.project_name });
-      }
-      return;
-    }
-
-    if (newUser) {
-      setUser({ id: newUser.id, email: newUser.email, project_name: newUser.project_name });
-    }
+    const profile = (data as any[])[0];
+    setUser({ id: profile.id, email: profile.email, project_name: profile.project_name });
   }, []);
 
   useEffect(() => {

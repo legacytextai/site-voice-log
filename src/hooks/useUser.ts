@@ -58,7 +58,7 @@ export function useUser() {
 
   const resetPassword = useCallback(async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `https://fieldlog.lovable.app/reset-password`,
+      redirectTo: `https://fieldlogapp.lovable.app/reset-password`,
     });
     if (error) throw error;
   }, []);

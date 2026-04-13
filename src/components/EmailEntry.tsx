@@ -79,7 +79,7 @@ const EmailEntry = ({ onSignUp, onSignIn, onResetPassword }: EmailEntryProps) =>
       <div className="w-full max-w-sm space-y-8">
         <div>
           <h1 className="text-lg font-bold text-foreground tracking-tight">
-            SiteLog
+            FieldLog
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             {mode === "signin" && "Sign in to your account"}

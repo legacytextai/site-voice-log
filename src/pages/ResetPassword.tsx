@@ -67,9 +67,9 @@ const ResetPassword = () => {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="w-full max-w-sm space-y-6 text-center">
-          <h1 className="text-lg font-bold text-foreground tracking-tight">SiteLog</h1>
+          <h1 className="text-lg font-bold text-foreground tracking-tight">FieldLog</h1>
           <p className="text-sm text-foreground">Password updated successfully!</p>
-          <p className="text-xs text-muted-foreground mt-2">Return to the SiteLog app and sign in with your new password.</p>
+          <p className="text-xs text-muted-foreground mt-2">Return to the FieldLog app and sign in with your new password.</p>
         </div>
       </div>
     );
@@ -79,7 +79,7 @@ const ResetPassword = () => {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="w-full max-w-sm space-y-6 text-center">
-          <h1 className="text-lg font-bold text-foreground tracking-tight">SiteLog</h1>
+          <h1 className="text-lg font-bold text-foreground tracking-tight">FieldLog</h1>
           {timedOut ? (
             <>
               <p className="text-sm text-foreground">No recovery session found.</p>
@@ -103,7 +103,7 @@ const ResetPassword = () => {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
       <div className="w-full max-w-sm space-y-8">
         <div>
-          <h1 className="text-lg font-bold text-foreground tracking-tight">SiteLog</h1>
+          <h1 className="text-lg font-bold text-foreground tracking-tight">FieldLog</h1>
           <p className="text-xs text-muted-foreground mt-0.5">Set your new password</p>
         </div>
 

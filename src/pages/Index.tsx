@@ -122,7 +122,7 @@ const Index = () => {
       <header className="px-5 pt-12 pb-6 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-bold text-foreground tracking-tight">
-            SiteLog
+            FieldLog
           </h1>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" onClick={() => setShowDebug((v) => !v)} className="text-xs text-muted-foreground">

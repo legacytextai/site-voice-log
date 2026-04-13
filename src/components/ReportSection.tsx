@@ -42,7 +42,7 @@ const ReportSection = ({
 
   const handleEmail = () => {
     if (!report) return;
-    const subject = encodeURIComponent(`SiteLog Daily Report – ${projectName} – ${todayFormatted()}`);
+    const subject = encodeURIComponent(`FieldLog Daily Report – ${projectName} – ${todayFormatted()}`);
     const pdfLine = pdfUrl ? `\n\n---\nDownload PDF: ${pdfUrl}` : "";
     const body = encodeURIComponent(report + pdfLine);
     window.open(`mailto:${userEmail}?subject=${subject}&body=${body}`, "_self");

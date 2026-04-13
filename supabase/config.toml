@@ -1,8 +1,8 @@
 project_id = "gppoaaekwbvlshyxjsqe"
 
 [auth]
-site_url = "https://fieldlog.lovable.app"
-additional_redirect_urls = ["https://fieldlog.lovable.app/reset-password"]
+site_url = "https://fieldlogapp.lovable.app"
+additional_redirect_urls = ["https://fieldlogapp.lovable.app/reset-password"]
 
 [functions.process-email-queue]
 verify_jwt = true

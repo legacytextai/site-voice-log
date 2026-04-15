@@ -24,16 +24,16 @@ export const MagicLinkEmail = ({
 }: MagicLinkEmailProps) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>Your login link for {siteName}</Preview>
+    <Preview>Your FieldLog login link</Preview>
     <Body style={main}>
       <Container style={container}>
         <Heading style={h1}>Your login link</Heading>
         <Text style={text}>
-          Click the button below to log in to {siteName}. This link will expire
+          Tap the button below to sign in to {siteName}. This link expires
           shortly.
         </Text>
         <Button style={button} href={confirmationUrl}>
-          Log In
+          Sign In
         </Button>
         <Text style={footer}>
           If you didn't request this link, you can safely ignore this email.

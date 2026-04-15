@@ -36,7 +36,7 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 }
 
 // Configuration
-const SITE_NAME = "fieldlogapp"
+const SITE_NAME = "FieldLog"
 const SENDER_DOMAIN = "notify.publicworkschannel.com"
 const ROOT_DOMAIN = "publicworkschannel.com"
 const FROM_DOMAIN = "publicworkschannel.com" // Domain shown in From address (may be root or sender subdomain)

@@ -187,6 +187,7 @@ serve(async (req) => {
 
     // Process logs: transcribe or skip based on guardrails
     const transcripts: string[] = [];
+    const usableLogs: VoiceLogForBackup[] = [];
 
     for (const log of logs) {
       if (log.duration_seconds < 3) {

@@ -118,8 +118,15 @@ serve(async (req) => {
   }
 
   try {
-    const { log_ids, project_name, report_date: inputReportDate } = await req.json();
+    const reqBody = await req.json();
+    const { log_ids, project_name, report_date: inputReportDate } = reqBody;
     const projectName = (project_name || "").trim() || "Untitled Project";
+    // TEMPORARY: client may pass `timezone` (IANA). Defaults to America/Los_Angeles
+    // until the next App Store update wires the mobile client to send it.
+    const timezone: string =
+      typeof reqBody.timezone === "string" && reqBody.timezone.trim()
+        ? reqBody.timezone
+        : DEFAULT_BACKUP_TZ;
 
     if (!log_ids || !Array.isArray(log_ids) || log_ids.length === 0) {
       return new Response(

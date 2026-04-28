@@ -213,6 +213,7 @@ serve(async (req) => {
         }
 
         transcripts.push(log.transcript);
+        usableLogs.push({ recorded_at: log.recorded_at, transcript: log.transcript });
 
         const logDate = new Date(log.recorded_at).toISOString().split("T")[0];
         const txtPath = `${logDate}/${userEmail}/${log.id}.txt`;
@@ -325,6 +326,7 @@ Rules:
 
       if (!isSentinel(transcript)) {
         transcripts.push(transcript);
+        usableLogs.push({ recorded_at: log.recorded_at, transcript });
       }
 
       const logDate = new Date(log.recorded_at).toISOString().split("T")[0];

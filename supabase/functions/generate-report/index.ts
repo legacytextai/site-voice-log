@@ -342,7 +342,10 @@ Rules:
       const emptyReport = "DAILY SITE REPORT\n\nNo activities reported. No usable field logs recorded.\n\n— End of Report —";
 
       const reportDate = inputReportDate || new Date().toISOString().split("T")[0];
-      const pdfBytes = generatePdfBytes(`FieldLog Daily Report — ${projectName}`, emptyReport);
+      const pdfBytes = generatePdfBytes([
+        { content: emptyReport },
+        { content: buildBackupLog(usableLogs, timezone) },
+      ]);
       const sanitizedName = projectName.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
       const pdfPath = `${reportDate}/${sanitizedName}_Daily Report_${reportDate}.pdf`;
 
@@ -470,7 +473,10 @@ Be factual. No embellishment. This is documentation-grade output.`,
     const reportContent = reportResult.choices?.[0]?.message?.content?.trim() || "";
 
     // Generate PDF
-    const pdfBytes = generatePdfBytes(`FieldLog Daily Report — ${projectName} — ${todayStr}`, reportContent);
+    const pdfBytes = generatePdfBytes([
+      { content: reportContent },
+      { content: buildBackupLog(usableLogs, timezone) },
+    ]);
     const sanitizedName = projectName.replace(/[^a-zA-Z0-9 \-]/g, "").trim().replace(/\s+/g, " ");
     const pdfPath = `${reportDate}/${sanitizedName}_Daily Report_${reportDate}.pdf`;
 
